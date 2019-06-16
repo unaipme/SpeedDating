@@ -1,0 +1,78 @@
+---
+title: "Speed Dating"
+author: "Mehmet Fatih Cagil & Unai Perez"
+header-includes:
+  - \usepackage{xcolor}
+output: pdf_document
+---
+
+```{r include=F}
+library(stringdist)
+
+speed.dating <- read.csv("speeddating.csv", na.strings = c('', '?'))
+```
+
+# Introduction
+
+The _Speed Dating_ dataset is the result of a experiment run by Fisman et al. from 2002 to 2004 The experiment consisted in engaging participant subjects, drawn from students in graduate and professional schools at Columbia University. These subjects would share conversations for four minutes and then they would decide if they both accepted in meeting each other again. Before the dating event, participants would fill in a form giving themselves a rating for **attractiveness**, **sincerity**, **intelligence**, ability to be **funny** and **ambition**. They also had to rate their interests in different topics. After the dating event, the participants would need to rate their partners' on the same characteristics for which they rated themselves. The dating event was organized in waves, and the participants randomly distributed among them, so that subjects in one wave would not interact with participants in other waves.
+
+Below, a detailed explanation of the variables. The names of the variables are not too self-explanatory. Whenever the notation `d_` is used, it refers to a categorically discretized version of a numerical variable that is also in the set. Whenever `_o` is used, it refers to the same meaning as without it, but for subject 2 instead of 1.
+
+- `has_null`: Binary feature that is `1` if there is any missing value in the row.
+- `wave`: The number of the wave in which the pairing took place.
+- `gender`: Categorical feature specifying the gender of subject 1.
+- `age[_o]`: Age of subjects 1 and 2, respectively.
+- `[d_]d_age`: Features that represent the age difference of the subjects.
+- `race[_o]`: Categorical features expressing the race of subjects 1 and 2, respectively.
+- `samerace`: Binary feature that is `1` if both subjects are of the same race.
+- `[d_]importance_same_{race|religion}`: A score from 0 to 10 expressing how important it is that the other subject shares race and religion, respectively.
+- `field`: Categorical variable describing the field of the studies of the subjects.
+- `[d_]pref_o_{attractive|sincere|intelligence|funny|ambitious|shared_interests}`: A score from 0 to 100 representing the preference of the subject 2 regarding each one of the characteristics mentioned earlier in their partner.
+- `[d_]{attractive|sincere|intelligence|funny|ambitious|shared_interests}_o`: A score from 0 to 10 representing the score each of the subjects gave to the other for each of the characteristics.
+- `[d_]{attractive|sincere|intelligence|funny|ambitious|shared_interests}_important`: A score from 0 to 100 representing how important is for the subject 1 each of the characteristics in their partner.
+- `[d_]{sports|tvsports|exercise|dining|museums|art|hiking|gaming|clubbing|reading|tv |theater|movies|concerts|music|shopping|yoga}`: A score from 0 to 10 representing the interest the subject 1 has in each of the topics.
+- `[d_]interests_correlate`: The correlation, measured in the range [-1,1], of the interests of the two subjects.
+- `[d_]expected_happy_with_sd_people`: A score from 0 to 10 of how satisfied the subject 1 expects to be with the people met in the speed dating.
+- `[d_]expected_num_interested_in_me`: Out of the 20 people subject 1 will meet, the amount they expect to be interested in them after the date.
+- `[d_]expected_num_matches`: The amount of matches the subject 1 expects to get.
+- `[d_]like`: A binary feature that is `1` if the subject 1 liked its date.
+- `[d_]guess_prob_liked`: A probability, guessed by subject 1, of whether they think the subject 2 liked the date.
+- `met`: A binary feature that is `1` if the subject 1 new subject 2 beforehand.
+- `decision[_o]`: Binary features that are `1` if the subjects decide they want to see the other subject in the future.
+- `match`: Target binary feature. `1` if both subjects agree on seeing each other in the future.
+
+# Data pre-processing
+
+## Missing values
+
+A first look at the dataset shows that missing data is encoded as question marks (`?`). These can be transformed into R's `NA` as soon as they are read, and can be dealt with later on. In total, `r length(which(sapply(speed.dating, anyNA)))` features have at least one missing value. If feature `has_null` is correctly labelled, then the amount of observations with `has_null` set to 1 (which equals to `r length(which(speed.dating$has_null == 1))`) and the amount of observations with a `NA` in any of the columns (which equals to `r nrow(speed.dating) - length(which(complete.cases(speed.dating)))`) should be, and are, the same. A huge majority (`r round(100 * nrow(speed.dating[speed.dating$has_null == 1,]) / nrow(speed.dating), 2)`%) of the observations in the dataset have some missing value, just deleting them is not an option.
+
+The summary reveals a series of potentially meaningful patterns when it comes to missing values. To begin with, all of the features related to interests (like `sports` or `hiking`) have the same amount of missing values, `r length(which(is.na(speed.dating$sports)))`, all of them for the same individuals. The features that represent the factors of the partner that are most important for the subject, like `attractive_important`, show a similar behaviour. That is also the case for the self ratings in the five criteria, like `attractive` and `intelligence`. They have at least the same amount of missing values, and most of do coincide in the same observations. It seems like a lot of people refused to fill the form before the dates! These people will be of no use for our research, so those rows will be deleted.
+
+```{r include=F}
+speed.dating <- speed.dating[!(is.na(speed.dating$sports)),]
+```
+
+Looking at the summary after the deletion of said rows, two more patterns can be seen. Self ratings, like `intelligence`, seem to be unknown more the same group of observations, exactly `r nrow(speed.dating[is.na(speed.dating$intelligence),])`. Meanwhile, the partner's preference features, like `pref_o_sincere`, share a very similar amount of missing values. Although the missing values of these two groups do not coincide in the same observations, it is interesting to see that specific subgroups of variables have missing values for the same individuals. These two groups are removed.
+
+```{r include=F}
+speed.dating <- speed.dating[!(is.na(speed.dating$pref_o_sincere)),]
+speed.dating <- speed.dating[!(is.na(speed.dating$attractive)),]
+```
+
+There seems to be a couple more of patterns. Both age related features are missing in the same observations, but the `d_age` feature describing age difference is there, so we could consider that data is not missing. Oddly enough, these missing observations belong to couples with more than 18 years of difference in age. The last pattern seems to relate the missing values of the ratings given by the partners (`attractive_o` and so on) and the ratings given by the subjects to the partner (`attractive_partner` and so on). But there is no actual connection.
+
+\textcolor{red}{what do we do with the remaining missing values? Imputation?}
+
+## Variable typing and coherence
+
+One odd characteristic about the dataset is revealed when looking at its summary. As explained in the introduction, participants rate themselves and their partners. However, the features that refer to these ratings are represented differently: Self ratings are numeric (usually, from 0 to 10) but the ratings to the partners have been explicitly discretized in groups that represent ranges. For self ratings, we will leave them as numeric so that metrics such as means can be calculated.
+
+The summary also showed that some grades are over the range. For example, one of the participants was graded by her partner as an 11 out of 10 in `funny`, which is funny by itself because the subject works in the law field, and we don't know any funny lawyer. Anyway, these need to be fixed. There are 38  variables that should range from 0 to 10, from which 4 have some value out of those bounds. All grades over 10 will be turned back into just 10, as we consider they represent the same quality.
+
+```{r include=F}
+speed.dating$gaming[speed.dating$gaming > 10] <- 10
+speed.dating$funny_o[speed.dating$funny_o > 10] <- 10
+speed.dating$attractive_o[speed.dating$attractive_o > 10] <- 10
+speed.dating$reading[speed.dating$reading > 10] <- 10
+```

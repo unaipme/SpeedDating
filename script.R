@@ -31,29 +31,68 @@
 #####   find the correlations between features and outcome.
 
 #we should start with converting the similar information into 1 consistent shape.
-setwd("C:/Users/mehme/Documents/GitHub/SpeedDating")
+#setwd("C:/Users/mehme/Documents/GitHub/SpeedDating")
 
-speed.dating <- read.csv("speeddating.csv")
+speed.dating <- read.csv("speeddating.csv", na.strings = c("", "?"))
+
+### Missing data
+
+summary(speed.dating)
+summary(speed.dating[,sapply(speed.dating, anyNA)])
+
+# These three are the same size, meaning those 79 observations have a lot of missing data.
+nrow(speed.dating[is.na(speed.dating$sports),])
+nrow(speed.dating[is.na(speed.dating$sports) & is.na(speed.dating$attractive),])
+nrow(speed.dating[is.na(speed.dating$sports) & is.na(speed.dating$attractive) & is.na(speed.dating$attractive_important),])
+
+# ELIMINATE!
+speed.dating <- speed.dating[!(is.na(speed.dating$sports)),]
+summary(speed.dating[,sapply(speed.dating, anyNA)])
+
+# Still... seems some people refused to rate themselves (intelligence and so on) or to give their preferences (pref_o_attractive and so on)
+# but those two groups do not seem to match, because the NAs of the first group do no show up in the summary below
+summary(speed.dating[is.na(speed.dating$pref_o_sincere),])
+
+# But having that complete group of features empty is a lot of data lost... DELETE!
+speed.dating <- speed.dating[!(is.na(speed.dating$pref_o_sincere)),]
+
+# Same goes for those that do not want to rate themselves, it is not fair, DEMOLISH!
+summary(speed.dating[is.na(speed.dating$attractive),])
+speed.dating <- speed.dating[!(is.na(speed.dating$attractive)),]
+
+summary(speed.dating[,sapply(speed.dating, anyNA)])
+
+# After these deletions, two groups of variables show similar patterns of missing data,
+# age and age_o have the same amount of NAs but
+speed.dating[is.na(speed.dating$age_o), c("d_age", "d_d_age")]
+# but it seems that even though the age is unknown, the age difference is known, which could still be useful.
+# All of the missing values for age are > 18, interesting!
+# Relationships with such age gap are indeed socially frowned upon, so... Understandable
+
+# Finally, there seems to be a last pattern... 
+summary(speed.dating[,sapply(speed.dating, anyNA)])
+# The groups of variables that show the mutual ratings between partners (as with attractive_o and attractive_partner)...
+# They seem to show a similar amount of missing values
+nrow(speed.dating[is.na(speed.dating$attractive_o),])
+nrow(speed.dating[is.na(speed.dating$attractive_o) & is.na(speed.dating$attractive_partner),])
+summary(speed.dating[!(is.na(speed.dating$attractive_o)),])
+summary(speed.dating[!(is.na(speed.dating$sinsere_o)),])
+# But, in the end, it looks it was just coincidence
 
 ##SOLVING THE FIELD COLUMN PROBLEM##
 
-#al the unique rows for field column, transformed into a dataframe named field.data
-field.column <- unique(speed.dating$field)
-field.data <- data.frame(field.column)
+# all the unique rows for field column, transformed into a dataframe named field.data
+field.data <- data.frame(levels(speed.dating$field))
 
 #This fcn returns the index of the most similar string if there is any with "maxDist" less than n 
 library(stringdist)
-ClosestMatch = function(string, stringVector, n = 3){
+ClosestMatch <- function(string, stringVector, n = 3){
   flag <- amatch(string, stringVector, maxDist = n)
-  if ( !is.na(flag)){
-    flag
-  }
-  else
-    -1
+  ifelse(!is.na(flag), flag, -1)
 }
 
 #dive into the whole field.data and apply the function to every row
-for ( i in 1:nrow(field.data)){
+for (i in 1:nrow(field.data)) {
   flag <- ClosestMatch(field.data[i,], field.data[-i,])
   if ( flag > 0){
     if ( i <= flag ) #if the found index is bigger than current row's index, increase the found(we discard the current row, so it decreases the no of rows by 1; we need to increase it again)
