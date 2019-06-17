@@ -49,7 +49,9 @@ Below, a detailed explanation of the variables. The names of the variables are n
 
 The features that are scored out of 100 work differently in comparison to regular grades. The subjects were given a 100 points to distribute among the five criteria and the `shared_interests` criteria. This means that the sum of the scores in these blocks should add up to 100.
 
-# Data pre-processing
+# Data preprocessing
+
+We know data pre-processing is long and tough (let's not make any joke about this), and this dataset was not easy to work with from the get-go. Here is how we preprocessed the data.
 
 ## Feature name typos
 
@@ -110,4 +112,16 @@ for (i in 1:nrow(speed.dating)) {
   speed.dating[i,16:21] <- norm.score(speed.dating[i, 16:21])
   speed.dating[i,40:45] <- norm.score(speed.dating[i, 40:45])
 }
+```
+
+typing
+
+## Feature selection (and extraction?)
+
+Feature `field` brings interesting information to the table. With this information, we could find correlation between the field of study of the subjects and, maybe, the probability of this being influential in the final choice. Nevertheless, the actual categories of the feature are filled with typos, differently formatted but equivalent answers, and globally or specifically ambiguous answers. For example, `finance` and `finanace` are two different categories, as well as `finance/economics` and `finance&economics`, and, finally, there are categories just labelled as `money` or the different categories `english` and `english education`, whose differences we are not really able to tell.
+
+We tried performing some sort of entity resolution by transforming categories to lower case, then applying Levenshtein edit distance to find similarities. A big maximum distance (like 5) would match `english` from `polish`, an unwanted result. A small maximum distance (like 2) would detect most typos but leave out categories with larger differences. It all came back to manual selection, which for `r length(levels(speed.dating$field))` different categories is cumbersome and tiring. We decided to get rid of the feature completely.
+
+```{r include=F}
+speed.dating$field <- NULL
 ```

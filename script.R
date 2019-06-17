@@ -32,6 +32,7 @@
 
 #we should start with converting the similar information into 1 consistent shape.
 #setwd("C:/Users/mehme/Documents/GitHub/SpeedDating")
+library(stringdist)
 
 speed.dating <- read.csv("speeddating.csv", na.strings = c("", "?"))
 
@@ -139,48 +140,47 @@ norm.score <- function(row) {
   s <- sum(row)
   lapply(row, function(x) 10 * ifelse(is.na(x), 0, x) / (m * (1 + (100 - s) / 100)))
 }
-# This needs to be applid for column blocks "_important" and "pref_o_", corresponding to indexes 16:21 and 40:45
+# This needs to be applied for column blocks "_important" and "pref_o_", corresponding to indexes 16:21 and 40:45
 for (i in 1:nrow(speed.dating)) {
   speed.dating[i,16:21] <- norm.score(speed.dating[i, 16:21])
   speed.dating[i,40:45] <- norm.score(speed.dating[i, 40:45])
 }
 
-##SOLVING THE FIELD COLUMN PROBLEM##
+# Now, looking at the different possible values of "field", it's a mess!
+# The categories with more than one word have quotation marks, and many possible catgories might refer to the same field.
+# Some have typos, differences between single and double quotation marks, lower vs upper case and whatnot.
+levels(speed.dating$field) <- tolower(levels(speed.dating$field))
+levels(speed.dating$field) <- ifelse(grepl("'", levels(speed.dating$field)), substr(levels(speed.dating$field), 2, nchar(levels(speed.dating$field)) - 1), levels(speed.dating$field))
 
-# all the unique rows for field column, transformed into a dataframe named field.data
-field.data <- data.frame(levels(speed.dating$field))
+table(speed.dating$field)
+# We take all of the current different fields and store them apart
+field.data <- levels(speed.dating$field)
 
-#This fcn returns the index of the most similar string if there is any with "maxDist" less than n 
-library(stringdist)
-ClosestMatch <- function(string, stringVector, n = 3){
-  flag <- amatch(string, stringVector, maxDist = n)
-  ifelse(!is.na(flag), flag, -1)
+# Now we dive into the fields: We are trying to find out the categories closest to each other according to
+# the Levenshtein edit distance between them (with a max distance of 3). Then, we compare the found matches.
+for (i in 1:length(field.data)) {
+  (flag <- amatch(field.data[i], field.data[-(1:i)], maxDist=3, method = "lv"))
+  #if (!is.na(flag)) field.data[i] <- ifelse(i <= flag, field.data[flag+1], field.data[flag])
+  if (!is.na(flag)) field.data[i] <- field.data[i + flag]
 }
 
-#dive into the whole field.data and apply the function to every row
-for (i in 1:nrow(field.data)) {
-  flag <- ClosestMatch(field.data[i,], field.data[-i,])
-  if ( flag > 0){
-    if ( i <= flag ) #if the found index is bigger than current row's index, increase the found(we discard the current row, so it decreases the no of rows by 1; we need to increase it again)
-      field.data[i,] = field.data[flag+1,]
-    else
-      field.data[i,] = field.data[flag,]
-  }
+# We also tried with different max distances like 2 or 5. 
+# We have found that, to identify typos, a max distance of 3 is the most appropriate.
+cbind(original=levels(speed.dating$field), match=field.data)[which(levels(speed.dating$field) != field.data),]
+# Still, "biology" and "ecology" should not be considered a match (as far as we are concerned)
+# Now, we need to (unfortunately) *manually* choose the correct categories
+#field.data[which(field.data=="ecology" & levels(speed.dating$field) != field.data)] <- "biology"
+for (i in c(4, 6, 7, 14)) {
+  original.value <- levels(speed.dating$field)[which(levels(speed.dating$field) != field.data)][i]
+  match.value <- field.data[which(levels(speed.dating$field) != field.data)][i]
+  # if the match value is preferred...
+  speed.dating$field[which(original.value == speed.dating$field)] <- match.value
 }
 
-#discard the repeating ones
-field.data <- unique(field.data)
+# And yet, after all of this procedure, we can see that some categories are too similar...
+# There is too much ambiguity in the categories. Let's just scrap the feature.
+speed.dating$field <- NULL
 
-# TODO: if you think this is fine, we can do following,
-# for each row at speed.dating$field, do ClosestMatch with new obtained field.data;
-# but I think it would be better if we discard this column entirely.
-# Diversity may be too large to obtain any accurate/meaningful results. We have fields like
-# Psychology, Educational Psychology, Organizational Psychology, Clinical Psychology etc
-# We dont know how strongly connected these types and counting them as one is not a good way to
-# handle the situation probably. 
-
-
-##After that mess with fields is done..
 
 colnames(datingData)
 head(datingData)
