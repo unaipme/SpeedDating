@@ -35,6 +35,10 @@
 
 speed.dating <- read.csv("speeddating.csv", na.strings = c("", "?"))
 
+### Fixing feature name typos and inconsistencies
+names(speed.dating)[which(names(speed.dating) %in% c("sinsere_o", "ambitous_o", "d_sinsere_o", "d_ambitous_o", "ambtition_important", "d_ambtition_important"))] <- 
+  c("sincere_o", "ambitious_o", "d_sincere_o", "d_ambitious_o", "ambition_important", "d_ambition_important")
+
 ### Missing data
 
 summary(speed.dating)
@@ -78,6 +82,68 @@ nrow(speed.dating[is.na(speed.dating$attractive_o) & is.na(speed.dating$attracti
 summary(speed.dating[!(is.na(speed.dating$attractive_o)),])
 summary(speed.dating[!(is.na(speed.dating$sinsere_o)),])
 # But, in the end, it looks it was just coincidence
+
+# Okay, finally those that declined to respond to any given block can also eff off. These two blocks below seem fine.
+table(apply(is.na(speed.dating[, 16:21]), 1, all))
+table(apply(is.na(speed.dating[, 22:27]), 1, all))
+
+# Oh, the next one has 176 matches!
+table(apply(is.na(speed.dating[, 28:33]), 1, all))
+# It also seems that, for those subjects with missing values for features 28 to 33, equivalent categorical features
+# (those from 34 to 39) do not have any meaningful data either.
+unique(speed.dating[which(apply(is.na(speed.dating[, 28:33]), 1, all)),34:39])
+# Those columns were probably automatically assigned because of the missing value. We better delete these guys.
+speed.dating <- speed.dating[-which(apply(is.na(speed.dating[, 28:33]), 1, all)),]
+
+# These groups are not completely empty...
+table(apply(is.na(speed.dating[, 34:39]), 1, all))
+table(apply(is.na(speed.dating[, 40:45]), 1, all))
+table(apply(is.na(speed.dating[, 52:56]), 1, all))
+
+# This one has another 55!
+table(apply(is.na(speed.dating[, 62:67]), 1, all))
+# And... the same thing as before happens, in which the categorical equivalent features do not hold any information of value
+unique(speed.dating[which(apply(is.na(speed.dating[, 62:67]), 1, all)),68:73])
+# Out they go
+speed.dating <- speed.dating[-which(apply(is.na(speed.dating[, 62:67]), 1, all)),]
+
+# And finally, no one declined to responde here. So, the cleansening is done
+table(apply(is.na(speed.dating[, 74:90]), 1, all))
+
+### Value coherence
+
+# The variables of the summary below are scores out of 10, but they all have values over 10.
+summary(speed.dating[,c("gaming", "funny_o", "attractive_o", "reading")])
+
+# Specifically, for feature "gaming", it seems like there are at least five differentiable subjects that graded their
+# interest in gaming as a 14 out of 10. It's the same five guys but
+# What's wrong with them?
+unique(speed.dating[!(is.na(speed.dating$gaming)) &speed.dating$gaming > 10, c(74:90, 98)])
+# Anyway, seems like categorical feature "d_gaming" groups them into category "[9-10]"
+unique(speed.dating[!(is.na(speed.dating$funny_o)) & speed.dating$funny_o > 10, c(28:33, 37)])
+# These guys are also categorized the same way.
+unique(speed.dating[!(is.na(speed.dating$attractive_o)) & speed.dating$attractive_o > 10, c(28:33, 34)])
+unique(speed.dating[!(is.na(speed.dating$reading)) & speed.dating$reading > 10, c(74:90, 100)])
+
+# Let's just reassign all of them to upper bound value 10.
+speed.dating$gaming[!(is.na(speed.dating$gaming)) & speed.dating$gaming > 10] <- 10
+speed.dating$funny_o[!(is.na(speed.dating$funny_o)) & speed.dating$funny_o > 10] <- 10
+speed.dating$attractive_o[!(is.na(speed.dating$attractive_o)) & speed.dating$attractive_o > 10] <- 10
+speed.dating$reading[!(is.na(speed.dating$reading)) & speed.dating$reading > 10] <- 10
+
+# Now the out of 100 scores need to be normalized. To do so, we take the highest score and treat it as the maximum score.
+# Then, normalize from it. This function will do it for us.
+# Some of the subjects, though, did not distribute completely the 100 points. These scores will be penalized.
+norm.score <- function(row) {
+  m <- max(row)
+  s <- sum(row)
+  lapply(row, function(x) 10 * ifelse(is.na(x), 0, x) / (m * (1 + (100 - s) / 100)))
+}
+# This needs to be applid for column blocks "_important" and "pref_o_", corresponding to indexes 16:21 and 40:45
+for (i in 1:nrow(speed.dating)) {
+  speed.dating[i,16:21] <- norm.score(speed.dating[i, 16:21])
+  speed.dating[i,40:45] <- norm.score(speed.dating[i, 40:45])
+}
 
 ##SOLVING THE FIELD COLUMN PROBLEM##
 

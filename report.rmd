@@ -9,6 +9,12 @@ output: pdf_document
 ```{r include=F}
 library(stringdist)
 
+norm.score <- function(row) {
+  m <- max(row)
+  s <- sum(row)
+  lapply(row, function(x) 10 * x / (m * (1 + (100 - s) / 100)))
+}
+
 speed.dating <- read.csv("speeddating.csv", na.strings = c('', '?'))
 ```
 
@@ -16,7 +22,7 @@ speed.dating <- read.csv("speeddating.csv", na.strings = c('', '?'))
 
 The _Speed Dating_ dataset is the result of a experiment run by Fisman et al. from 2002 to 2004 The experiment consisted in engaging participant subjects, drawn from students in graduate and professional schools at Columbia University. These subjects would share conversations for four minutes and then they would decide if they both accepted in meeting each other again. Before the dating event, participants would fill in a form giving themselves a rating for **attractiveness**, **sincerity**, **intelligence**, ability to be **funny** and **ambition**. They also had to rate their interests in different topics. After the dating event, the participants would need to rate their partners' on the same characteristics for which they rated themselves. The dating event was organized in waves, and the participants randomly distributed among them, so that subjects in one wave would not interact with participants in other waves.
 
-Below, a detailed explanation of the variables. The names of the variables are not too self-explanatory. Whenever the notation `d_` is used, it refers to a categorically discretized version of a numerical variable that is also in the set. Whenever `_o` is used, it refers to the same meaning as without it, but for subject 2 instead of 1.
+Below, a detailed explanation of the variables. The names of the variables are not too self-explanatory. Whenever the notation "`d_`" is used, it refers to a categorically discretized version of a numerical variable that is also in the set. Whenever "`_o`" is used, it has the same meaning as without it, but for subject 2 instead of 1.
 
 - `has_null`: Binary feature that is `1` if there is any missing value in the row.
 - `wave`: The number of the wave in which the pairing took place.
@@ -28,7 +34,7 @@ Below, a detailed explanation of the variables. The names of the variables are n
 - `[d_]importance_same_{race|religion}`: A score from 0 to 10 expressing how important it is that the other subject shares race and religion, respectively.
 - `field`: Categorical variable describing the field of the studies of the subjects.
 - `[d_]pref_o_{attractive|sincere|intelligence|funny|ambitious|shared_interests}`: A score from 0 to 100 representing the preference of the subject 2 regarding each one of the characteristics mentioned earlier in their partner.
-- `[d_]{attractive|sincere|intelligence|funny|ambitious|shared_interests}_o`: A score from 0 to 10 representing the score each of the subjects gave to the other for each of the characteristics.
+- `[d_]{attractive|sincere|intelligence|funny|ambitious|shared_interests}_o`: A score from 0 to 10 representing the score subject 2 gives to subject 1 for each of the characteristics.
 - `[d_]{attractive|sincere|intelligence|funny|ambitious|shared_interests}_important`: A score from 0 to 100 representing how important is for the subject 1 each of the characteristics in their partner.
 - `[d_]{sports|tvsports|exercise|dining|museums|art|hiking|gaming|clubbing|reading|tv |theater|movies|concerts|music|shopping|yoga}`: A score from 0 to 10 representing the interest the subject 1 has in each of the topics.
 - `[d_]interests_correlate`: The correlation, measured in the range [-1,1], of the interests of the two subjects.
@@ -41,13 +47,24 @@ Below, a detailed explanation of the variables. The names of the variables are n
 - `decision[_o]`: Binary features that are `1` if the subjects decide they want to see the other subject in the future.
 - `match`: Target binary feature. `1` if both subjects agree on seeing each other in the future.
 
+The features that are scored out of 100 work differently in comparison to regular grades. The subjects were given a 100 points to distribute among the five criteria and the `shared_interests` criteria. This means that the sum of the scores in these blocks should add up to 100.
+
 # Data pre-processing
+
+## Feature name typos
+
+One weird characteristic about this dataset is the lack of consistency and the bad ortography in the names of the features. In the list above, all the names have been correctly written. However, "sincere" is many times misspelled as "sinsere", or "ambitious" as "ambitous". Also, sometimes "ambition" is used instead. The first step is to just fix the names of the variables.
+
+```{r include=F}
+names(speed.dating)[which(names(speed.dating) %in% c("sinsere_o", "ambitous_o", "d_sinsere_o", "d_ambitous_o", "ambtition_important", "d_ambtition_important"))] <- 
+  c("sincere_o", "ambitious_o", "d_sincere_o", "d_ambitious_o", "ambition_important", "d_ambition_important")
+```
 
 ## Missing values
 
 A first look at the dataset shows that missing data is encoded as question marks (`?`). These can be transformed into R's `NA` as soon as they are read, and can be dealt with later on. In total, `r length(which(sapply(speed.dating, anyNA)))` features have at least one missing value. If feature `has_null` is correctly labelled, then the amount of observations with `has_null` set to 1 (which equals to `r length(which(speed.dating$has_null == 1))`) and the amount of observations with a `NA` in any of the columns (which equals to `r nrow(speed.dating) - length(which(complete.cases(speed.dating)))`) should be, and are, the same. A huge majority (`r round(100 * nrow(speed.dating[speed.dating$has_null == 1,]) / nrow(speed.dating), 2)`%) of the observations in the dataset have some missing value, just deleting them is not an option.
 
-The summary reveals a series of potentially meaningful patterns when it comes to missing values. To begin with, all of the features related to interests (like `sports` or `hiking`) have the same amount of missing values, `r length(which(is.na(speed.dating$sports)))`, all of them for the same individuals. The features that represent the factors of the partner that are most important for the subject, like `attractive_important`, show a similar behaviour. That is also the case for the self ratings in the five criteria, like `attractive` and `intelligence`. They have at least the same amount of missing values, and most of do coincide in the same observations. It seems like a lot of people refused to fill the form before the dates! These people will be of no use for our research, so those rows will be deleted.
+The summary reveals a series of potentially meaningful patterns when it comes to missing values. Features can be grouped as shown in the list of the previous section, into what would translate as (let's call it) a block of questions from the form. To begin with, all of the features from the block of interests (like `sports` or `hiking`) have the same amount of missing values, `r length(which(is.na(speed.dating$sports)))`, all of them for the same individuals. The block that represents the factors of the partner that are most important for the subject, like `attractive_important`, show a similar behaviour. That is also the case for the self ratings in the five criteria, like `attractive` and `intelligence`. They have at least the same amount of missing values, and most of do coincide in the same observations. It seems like a lot of people refused to fill the form before the dates! These people will be of no use for our research, so those rows will be deleted.
 
 ```{r include=F}
 speed.dating <- speed.dating[!(is.na(speed.dating$sports)),]
@@ -62,17 +79,35 @@ speed.dating <- speed.dating[!(is.na(speed.dating$attractive)),]
 
 There seems to be a couple more of patterns. Both age related features are missing in the same observations, but the `d_age` feature describing age difference is there, so we could consider that data is not missing. Oddly enough, these missing observations belong to couples with more than 18 years of difference in age. The last pattern seems to relate the missing values of the ratings given by the partners (`attractive_o` and so on) and the ratings given by the subjects to the partner (`attractive_partner` and so on). But there is no actual connection.
 
+Finally, aside from these patterns, all of the participants that did not respond at all to, at least, one of the blocks. This is only the case for two blocks. The first one is the rating that subject 2 gives subject 1 regarding the five criteria. The second block is the opposite, the ratings subject 1 give to subject 2 regarding those criteria. The features that represent categorically the same meaning (those named the same but starting with "`d_`") do not seem to hold any value for these individuals anyway; they are all assigned, seemingly by default, to the category `[0-5]`. All these observations are also deleted.
+
+```{r include=F}
+speed.dating <- speed.dating[-which(apply(is.na(speed.dating[, 28:33]), 1, all)),]
+speed.dating <- speed.dating[-which(apply(is.na(speed.dating[, 62:67]), 1, all)),]
+```
+
 \textcolor{red}{what do we do with the remaining missing values? Imputation?}
 
 ## Variable typing and coherence
 
-One odd characteristic about the dataset is revealed when looking at its summary. As explained in the introduction, participants rate themselves and their partners. However, the features that refer to these ratings are represented differently: Self ratings are numeric (usually, from 0 to 10) but the ratings to the partners have been explicitly discretized in groups that represent ranges. For self ratings, we will leave them as numeric so that metrics such as means can be calculated.
-
-The summary also showed that some grades are over the range. For example, one of the participants was graded by her partner as an 11 out of 10 in `funny`, which is funny by itself because the subject works in the law field, and we don't know any funny lawyer. Anyway, these need to be fixed. There are 38  variables that should range from 0 to 10, from which 4 have some value out of those bounds. All grades over 10 will be turned back into just 10, as we consider they represent the same quality.
+The summary shows that some grades are over the range. For example, one of the participants graded herself as an 11 out of 10 in `funny`, which is funny by itself because the subject is studying the _law_ field, and we don't know any funny lawyer. For feature `gaming`, there are 5 different participants that graded their interests as 14 out of 10. These definitely need to be fixed. There are 38 variables that should range from 0 to 10, from which 4 have some value out of those bounds. For the `gaming` example, categorical feature `d_gaming` groups the incoherent values into `[9-10]`. This makes us believe that all grades over 10 should be turned back into just 10.
 
 ```{r include=F}
-speed.dating$gaming[speed.dating$gaming > 10] <- 10
-speed.dating$funny_o[speed.dating$funny_o > 10] <- 10
-speed.dating$attractive_o[speed.dating$attractive_o > 10] <- 10
-speed.dating$reading[speed.dating$reading > 10] <- 10
+speed.dating$gaming[!(is.na(speed.dating$gaming)) & speed.dating$gaming > 10] <- 10
+speed.dating$funny_o[!(is.na(speed.dating$funny_o)) & speed.dating$funny_o > 10] <- 10
+speed.dating$attractive_o[!(is.na(speed.dating$attractive_o)) & speed.dating$attractive_o > 10] <- 10
+speed.dating$reading[!(is.na(speed.dating$reading)) & speed.dating$reading > 10] <- 10
+```
+
+On the other hand, the block of features representing the preferences of the subjects regarding the five criteria (`_important` block for subject 1 and `pref_o_` block for subject 2) are scores out of 100. The rest of scores are out of 10. But, as explained in the introduction, these features work differently. If the out of 100 scores were regular scores, it would be better to multiply by 10 the out of 10 scores to avoid inaccuracies. In this case, we have decided to use the following formula to turn each feature in its proportional score between 0 and 10, based on the criteria with the highest score:
+
+$$ score^{(i)}_{10} = \frac{10 \times score^{(i)}_{100}}{\max(score_{100}) \times (1 + \frac{100 - \sum_{i'} score^{(i')}_{100}}{100})}$$
+
+It must be noted that a penalization has been added to the denominator because some subjects did not distribute the available 100 points (as explained in the introduction) completely.
+
+```{r include=F}
+for (i in 1:nrow(speed.dating)) {
+  speed.dating[i,16:21] <- norm.score(speed.dating[i, 16:21])
+  speed.dating[i,40:45] <- norm.score(speed.dating[i, 40:45])
+}
 ```
