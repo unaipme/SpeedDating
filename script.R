@@ -197,10 +197,15 @@ speed.dating$field <- NULL
 
 # We are also getting rid of these features. We don't need "age", "age_o" or "d_age" if we have "d_d_age", which
 # we find much more representative. And "expected_num_interested_in_me" has waaaay too many NA's.
+# Also, we don't really care about `met`, `decision` or `decision_o`
 speed.dating$age <- NULL
 speed.dating$age_o <- NULL
 speed.dating$d_age <- NULL
 speed.dating$expected_num_interested_in_me <- NULL
+
+speed.dating$met <- NULL
+speed.dating$decision <- NULL
+speed.dating$decision_o <- NULL
 
 ### DATA IMPUTATION
 
@@ -219,23 +224,25 @@ speed.dating[, which(sapply(speed.dating, anyNA))] <- mice.speed.dating.complete
 
 # Detect multivariate outliers via Mahalanobis distance
 # Outlier detection holds for numerical values only
-dating.outliers <- Moutlier(speed.dating[,which(sapply(speed.dating, is.numeric))], quantile = 0.975, plot = TRUE)
-Classic.Mahalanobis <- table(factor(outliers$md > outliers$cutoff, labels=c("Not Outlier", "Outlier")))
-Robust.Mahalanobis <- table(factor(outliers$rd > outliers$cutoff, labels=c("Not Outlier", "Outlier")))
-c <- rbind(Classic.Mahalanobis, Robust.Mahalanobis) 
-c
+dating.outliers <- Moutlier(scale(speed.dating[,sapply(speed.dating, is.numeric)]), plot=F, quantile = 0.975) #, col=ifelse(speed.dating$match, "orangered1", "royalblue1"), las=1, cex.axis=.75, pch=20)
+par(mfrow=c(1,2))
+plot(dating.outliers$md, main="Mahalanobis Distance", xlab="Distance", ylab="Index", col=ifelse(speed.dating$match, "orangered1", "royalblue1"), las=1, cex.axis=.75, pch=20, ylim=c(0, max(dating.outliers$rd)))
+plot(dating.outliers$rd, main="Robustified Mahalanobis", xlab="Distance", ylab="Index", col=ifelse(speed.dating$match, "orangered1", "royalblue1"), las=1, cex.axis=.75, pch=20, ylim=c(0, max(dating.outliers$rd)))
+cutoff <- sort(dating.outliers$rd, decreasing = T)[floor(nrow(speed.dating) * 0.025)]
+abline(h = cutoff, lty=2, col="red4", lwd=2.25)
+par(mfrow=c(1,1))
+
+speed.dating <- speed.dating[-order(dating.outliers$rd, decreasing = T)[1:floor(nrow(speed.dating) * 0.025)],]
+
+#Classic.Mahalanobis <- table(factor(dating.outliers$md > dating.outliers$cutoff, labels=c("Not Outlier", "Outlier")))
+#Robust.Mahalanobis <- table(factor(dating.outliers$rd > dating.outliers$cutoff, labels=c("Not Outlier", "Outlier")))
+#c <- rbind(Classic.Mahalanobis, Robust.Mahalanobis) 
 
 #table(c) # TRUE if outlier
-plot(outliers$rd ~ outliers$md, main="Robust against classical Mahalanobis distances", cex.main=0.8, xlab="Classic Mahalanobis", ylab="Robust Mahalanobis", cex.lab=0.8)
-abline(h=outliers$cutoff, col="red") abline(v=outliers$cutoff, col="red")
+#plot(dating.outliers$rd ~ dating.outliers$md, main="Robust against classical Mahalanobis distances", cex.main=0.8, xlab="Classic Mahalanobis", ylab="Robust Mahalanobis", cex.lab=0.8)
+#abline(h=dating.outliers$cutoff, col="red")
+#abline(v=dating.outliers$cutoff, col="red")
 
 # Remove multivariate Mahalanobis outliers
-datingDataNum_mout <- datingDataNum[outliers$md < outliers$cutoff & outliers$rb < outliers$cutoff,] # See which instances are outliers
-datingDataNum[outliers$md >= outliers$cutoff & outliers$rd >= outliers$cutoff,]
-
-#put data to their original location for all the variables
-datingData$d_age <- DatingDataNum$datingData.d_age
-
-
-
-
+#datingDataNum_mout <- datingDataNum[outliers$md < outliers$cutoff & outliers$rb < outliers$cutoff,] # See which instances are outliers
+#datingDataNum[outliers$md >= outliers$cutoff & outliers$rd >= outliers$cutoff,]

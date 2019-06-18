@@ -13,6 +13,7 @@ output:
 ```{r include=F}
 library(stringdist)
 library(mice)
+library(chemometrics)
 
 norm.score <- function(row) {
   m <- max(row, na.rm = T)
@@ -114,10 +115,13 @@ speed.dating$reading[!(is.na(speed.dating$reading)) & speed.dating$reading > 10]
 
 As explained in the introduction, there is a block of features that represent the preferences of the subjects by distributing 100 points among them. This is not always the case, though. Some participants did not actually completely use the 100 points, but this is addressed later in the document. The problem comes from those that used more than 100 points. These guys clearly do not know how to add up. For the sake of consistency, we have decided to remove these observations. Before, we have checked their field of studies just out of curiosity, and many of these are mathematicians and engineers. Future is bright!
 
+```{r include=F}
+speed.dating <- speed.dating[-c(which(floor(apply(speed.dating[,16:21], 1, sum)) > 100), which(floor(apply(speed.dating[,40:45], 1, sum)) > 100)),]
+```
+
 Some of those subjects, though, just exceed the 100 points by decimals. To avoid having problems in the future, these decimals have been substracted from them so that their score will add up to exactly 100. 
 
 ```{r include=F}
-speed.dating <- speed.dating[-c(which(floor(apply(speed.dating[,16:21], 1, sum)) > 100), which(floor(apply(speed.dating[,40:45], 1, sum)) > 100)),]
 speed.dating[which(apply(speed.dating[,16:21], 1, sum) > 100),16:21] <- speed.dating[which(apply(speed.dating[,16:21], 1, sum) > 100),16:21] - ((apply(speed.dating[which(apply(speed.dating[,16:21], 1, sum) > 100),16:21], 1, sum) - 100) / 6)
 speed.dating[which(apply(speed.dating[,40:45], 1, sum) > 100),40:45] <- speed.dating[which(apply(speed.dating[,40:45], 1, sum) > 100),40:45] - ((apply(speed.dating[which(apply(speed.dating[,40:45], 1, sum) > 100),40:45], 1, sum) - 100) / 6)
 ```
@@ -128,6 +132,9 @@ Finally, seeing that some of the types automatically assigned to the features by
 speed.dating$has_null <- as.logical(speed.dating$has_null)
 speed.dating$wave <- as.factor(speed.dating$wave)
 speed.dating$samerace <- as.logical(speed.dating$samerace)
+speed.dating$decision <- as.logical(speed.dating$decision)
+speed.dating$decision_o <- as.logical(speed.dating$decision_o)
+speed.dating$match <- as.logical(speed.dating$match)
 ```
 
 ## Feature selection and extraction
@@ -170,14 +177,35 @@ speed.dating$age <- NULL
 speed.dating$age_o <- NULL
 speed.dating$d_age <- NULL
 speed.dating$expected_num_interested_in_me <- NULL
+speed.dating$met <- NULL
+speed.dating$decision <- NULL
+speed.dating$decision_o <- NULL
 ```
 
 ## Data imputation
 
 After the all the preprocessing so far, only `r length(which(sapply(speed.dating, anyNA)))` features with NAs are left. These have been imputed using the MICE imputation method, using the five criteria parameters and the `_important` block as the only supplementary variables. Using the whole dataset slows down the whole process and makes it last up to 30 times more. Using only these features still gives realistic imputation, so we considered it appropriate.
 
-```{r include=F}
+```{r include=F, cache=T}
 mice.speed.dating <- mice(speed.dating[,c(which(sapply(speed.dating, anyNA)), 37:42, 47:52)], method = 'pmm', seed = 500)
 mice.speed.dating.complete <- complete(mice.speed.dating)
 speed.dating[, which(sapply(speed.dating, anyNA))] <- mice.speed.dating.complete[,1:length(which(sapply(speed.dating, anyNA)))]
+```
+
+## Outlier detection
+
+The dataset has `r ncol(speed.dating)` left after the preprocessing. They are still plenty, so trying to find univariate outliers is not only annoying, but also useless. For the multivariate outlier detection, the Mahalanobis distance has been used. Figure \ref{fig:multivar-outliers} shows a graphical representation of the distances of each observation, where the red dots represent the observations with a match, and the blue ones observations without a match. On plain sight, there does not seem to be any correlation between the outcome and the distance (or the _outlierness_, we could say). If anything, we can state that the few that stand out the most are non-matches. The 2.5% of the observations with the highest Mahalanobis distance, shown in the figure \ref{fig:multivar-outliers} above the line, will be considered outliers and removed.
+
+```{r multivar-outliers, echo=F, fig.cap="\\label{fig:multivar-outliers}Graphical representation of the Mahalanobis distances for each observation", fig.align="center", fig.height=4, fig.width=5}
+dating.outliers <- Moutlier(scale(speed.dating[,sapply(speed.dating, is.numeric)]), plot=F, quantile = 0.975)
+par(mfrow=c(1,2))
+plot(dating.outliers$md, main="Mahalanobis Distance", ylab="Distance", xlab="", col=ifelse(speed.dating$match, "orangered1", "royalblue1"), las=1, cex.axis=.75, pch=20, ylim=c(0, max(dating.outliers$rd)), xaxt="n", cex.main=.8, cex.lab = .7)
+plot(dating.outliers$rd, main="Robustified Mahalanobis", ylab="", xlab="", col=ifelse(speed.dating$match, "orangered1", "royalblue1"), las=1, cex.axis=.75, pch=20, ylim=c(0, max(dating.outliers$rd)), xaxt="n", cex.main=.7)
+cutoff <- sort(dating.outliers$rd, decreasing = T)[floor(nrow(speed.dating) * 0.025)]
+abline(h = cutoff, lty=2, col="red4", lwd=2.25)
+par(mfrow=c(1,1))
+```
+
+```{r include=F}
+speed.dating <- speed.dating[-order(dating.outliers$rd, decreasing = T)[1:floor(nrow(speed.dating) * 0.025)],]
 ```

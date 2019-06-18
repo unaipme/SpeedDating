@@ -4,3 +4,6 @@
 .Ruserdata
 report.pdf
 ML-Project.Rproj
+report_cache/
+report_files/
+report.log
