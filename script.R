@@ -1,7 +1,10 @@
 library(stringdist)
 library(mice)
-library(missForest)
 library(chemometrics)
+library(nnet)
+library(caret)
+library(FactoMineR)
+library(shape)
 
 speed.dating <- read.csv("speeddating.csv", na.strings = c("", "?"))
 
@@ -133,12 +136,12 @@ speed.dating[which(apply(speed.dating[,40:45], 1, sum) > 100),40:45] <- speed.da
 # Before continuing to feature selection and extraction, let's see if all features are correctly typed
 sapply(speed.dating, class)
 # And we think not. Let's fix this.
-speed.dating$has_null <- as.logical(speed.dating$has_null)
+speed.dating$has_null <- as.factor(speed.dating$has_null)
 speed.dating$wave <- as.factor(speed.dating$wave)
-speed.dating$samerace <- as.logical(speed.dating$samerace)
-speed.dating$decision <- as.logical(speed.dating$decision)
-speed.dating$decision_o <- as.logical(speed.dating$decision_o)
-speed.dating$match <- as.logical(speed.dating$match)
+speed.dating$samerace <- as.factor(speed.dating$samerace)
+speed.dating$decision <- as.factor(speed.dating$decision)
+speed.dating$decision_o <- as.factor(speed.dating$decision_o)
+speed.dating$match <- as.factor(speed.dating$match)
 
 ### FEATURE EXTRACTION / SELECTION
 
@@ -202,10 +205,12 @@ speed.dating$age <- NULL
 speed.dating$age_o <- NULL
 speed.dating$d_age <- NULL
 speed.dating$expected_num_interested_in_me <- NULL
-
 speed.dating$met <- NULL
 speed.dating$decision <- NULL
 speed.dating$decision_o <- NULL
+speed.dating$importance_same_religion <- NULL
+speed.dating$d_importance_same_religion <- NULL
+speed.dating$has_null <- NULL
 
 ### DATA IMPUTATION
 
@@ -224,10 +229,10 @@ speed.dating[, which(sapply(speed.dating, anyNA))] <- mice.speed.dating.complete
 
 # Detect multivariate outliers via Mahalanobis distance
 # Outlier detection holds for numerical values only
-dating.outliers <- Moutlier(scale(speed.dating[,sapply(speed.dating, is.numeric)]), plot=F, quantile = 0.975) #, col=ifelse(speed.dating$match, "orangered1", "royalblue1"), las=1, cex.axis=.75, pch=20)
+dating.outliers <- Moutlier(scale(speed.dating[,sapply(speed.dating, is.numeric)]), plot=F, quantile = 0.975)
 par(mfrow=c(1,2))
-plot(dating.outliers$md, main="Mahalanobis Distance", xlab="Distance", ylab="Index", col=ifelse(speed.dating$match, "orangered1", "royalblue1"), las=1, cex.axis=.75, pch=20, ylim=c(0, max(dating.outliers$rd)))
-plot(dating.outliers$rd, main="Robustified Mahalanobis", xlab="Distance", ylab="Index", col=ifelse(speed.dating$match, "orangered1", "royalblue1"), las=1, cex.axis=.75, pch=20, ylim=c(0, max(dating.outliers$rd)))
+plot(dating.outliers$md, main="Mahalanobis Distance", xlab="Distance", ylab="Index", col=ifelse(speed.dating$match == "1", "orangered1", "royalblue1"), las=1, cex.axis=.75, pch=20, ylim=c(0, max(dating.outliers$rd)), xaxt="n")
+plot(dating.outliers$rd, main="Robustified Mahalanobis", xlab="Distance", ylab="Index", col=ifelse(speed.dating$match == "1", "orangered1", "royalblue1"), las=1, cex.axis=.75, pch=20, ylim=c(0, max(dating.outliers$rd)), xaxt="n")
 cutoff <- sort(dating.outliers$rd, decreasing = T)[floor(nrow(speed.dating) * 0.025)]
 abline(h = cutoff, lty=2, col="red4", lwd=2.25)
 par(mfrow=c(1,1))
@@ -246,3 +251,49 @@ speed.dating <- speed.dating[-order(dating.outliers$rd, decreasing = T)[1:floor(
 # Remove multivariate Mahalanobis outliers
 #datingDataNum_mout <- datingDataNum[outliers$md < outliers$cutoff & outliers$rb < outliers$cutoff,] # See which instances are outliers
 #datingDataNum[outliers$md >= outliers$cutoff & outliers$rd >= outliers$cutoff,]
+
+### EXPLORATORY DATA ANALYSIS (VISUALIZATION)
+
+names(speed.dating)
+speed.dating.pca <- speed.dating[,c(which(sapply(speed.dating, is.numeric)), 112)]
+pca.output <- PCA(speed.dating.pca, quali.sup = c(53), graph = T)
+
+pca.best.repr.vars <- order(sqrt(pca.output$var$coord[,1]^2 + pca.output$var$coord[,2] ^ 2), decreasing = T)[1:10]
+
+plot(pca.output$var$coord, col=0, xlim=c(-2.75,1.75), ylim=c(-1,1))
+abline(h=0, col="gray")
+abline(v=0, col="gray")
+plotellipse(1, 1)
+Arrows(0, 0, pca.output$var$coord[pca.best.repr.vars,1], pca.output$var$coord[pca.best.repr.vars,2], arr.type = "simple", col=rainbow(10))
+legend("topleft", legend=row.names(pca.output$var$coord[pca.best.repr.vars,]), col=rainbow(10), lty=1)
+
+### ARTIFICIAL NEURAL NETWORKS
+
+N <- nrow(speed.dating)
+
+learn <- sample(1:N, round(2 * N / 3))
+
+nlearn <- length(learn)
+ntest <- N - nlearn
+
+speed.dating.cat <- speed.dating[,sapply(speed.dating, is.factor)]
+speed.dating.cont <- data.frame(scale(speed.dating[,sapply(speed.dating, is.numeric)], scale=F), match=speed.dating$match)
+
+
+trControl <- trainControl(method="cv", number=10)
+multinom.10x10 <- train(match ~ ., data=speed.dating.cont, subset=learn, method='multinom', trControl=trControl, maxit=200)
+
+prediction <- predict(multinom.10x10$finalModel, newdata=speed.dating[-learn,], type="class")
+#cbind(prediction, speed.dating$match[-learn])
+table(prediction, original=speed.dating$match[-learn])
+
+#model.nnet0 <- multinom(match ~ ., data=speed.dating.cat, subset=learn, maxit=200)
+
+#model.nnet0 <- multinom(match ~ d_d_age + samerace + d_pref_o_attractive + d_pref_o_sincere + d_pref_o_intelligence +
+ #                         d_pref_o_funny + d_pref_o_ambitious + d_pref_o_shared_interests, data=speed.dating, subset=learn, maxit=200)
+
+prediction <- predict(model.nnet0, newdata=speed.dating[-learn,], type="class")
+cbind(prediction, speed.dating$match[-learn])
+table(prediction, speed.dating$match[-learn])
+
+#model.nnet0 <- multinom(match ~ , data=speed.dating, subset=learn, maxit=200)

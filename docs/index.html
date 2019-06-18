@@ -67,6 +67,10 @@ $(document).ready(function () {
       <li><a href="#data-imputation">Data imputation</a></li>
       <li><a href="#outlier-detection">Outlier detection</a></li>
       </ul></li>
+      <li><a href="#data-exploration">Data exploration</a><ul>
+      <li><a href="#data-visualization">Data visualization</a></li>
+      </ul></li>
+      <li><a href="#articifial-neural-networks">Articifial Neural Networks</a></li>
       </ul>
     </div>
 </div>
@@ -134,7 +138,7 @@ $(document).ready(function () {
 <p>This transformation would need to be stored in completely different variables, but we have decided to do without the original out of 100 scores. Thus, they have been overwritten. That has been the case too for the equivalent categorical variables (the ones with same name but starting with <code>d_</code>), which have been replaced using the same categories as the rest of the categorical variables: <code>[0-5]</code>, <code>[6-8]</code> and <code>[9-10]</code>. We think these represent the different feelings a person can have towards something appropriately; they could be translated as “dislike”, “like”, and “love”.</p>
 <p>Feature <code>field</code> brings interesting information to the table. With this information, we could find correlation between the field of study of the subjects and, maybe, the probability of this being influential in the final choice. Nevertheless, the actual categories of the feature are filled with typos, differently formatted but equivalent answers, and globally or specifically ambiguous answers. For example, <code>finance</code> and <code>finanace</code> are two different categories, as well as <code>finance/economics</code> and <code>finance&amp;economics</code>, and, finally, there are categories just labelled as <code>money</code> or the different categories <code>english</code> and <code>english education</code>, whose differences we are not really able to tell.</p>
 <p>We tried performing some sort of entity resolution by transforming categories to lower case, then applying Levenshtein edit distance to find similarities. A big maximum distance (like 5) would match <code>english</code> from <code>polish</code>, an unwanted result. A small maximum distance (like 2) would detect most typos but leave out categories with larger differences. It all came back to manual selection, which for 259 different categories is cumbersome and tiring. We decided to get rid of the feature completely.</p>
-<p>Now that we are discarding features, we decide to discard the features <code>age</code>, <code>age_o</code> and <code>d_age</code>. We do not think the actual ages are all that important, or event the age difference per se; variable <code>d_d_age</code>, categorical representation of the age difference, will do just fine. Also, feature <code>expected_num_interested_in_me</code> will be discarded, due to its 6156 missing variables. The rest of features, a total of 118, are staying. We think that having different representations of the same data directly from the raw file saves us time and effort, and opens up the possibility to apply different models without more extracted features.</p>
+<p>Now that we are discarding features, we decide to discard the features <code>age</code>, <code>age_o</code> and <code>d_age</code>. We do not think the actual ages are all that important, or event the age difference per se; variable <code>d_d_age</code>, categorical representation of the age difference, will do just fine. Also, feature <code>expected_num_interested_in_me</code> will be discarded, due to its 6156 missing variables. Features <code>importance_same_religion</code> and <code>d_importance_same_religion</code> get discarded too because we do not actually have the religion data, so there is nothing to compare it to (They must have slipped-up!). And we do not need <code>has_null</code> anymore. The rest of features, a total of 112, are staying. We think that having different representations of the same data directly from the raw file saves us time and effort, and opens up the possibility to apply different models without more extracted features.</p>
 </div>
 <div id="data-imputation" class="section level2">
 <h2>Data imputation</h2>
@@ -150,6 +154,15 @@ Graphical representation of the Mahalanobis distances for each observation
 </p>
 </div>
 </div>
+</div>
+<div id="data-exploration" class="section level1">
+<h1>Data exploration</h1>
+<div id="data-visualization" class="section level2">
+<h2>Data visualization</h2>
+</div>
+</div>
+<div id="articifial-neural-networks" class="section level1">
+<h1>Articifial Neural Networks</h1>
 </div>
 </div>
 
