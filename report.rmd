@@ -1,9 +1,13 @@
 ---
 title: "Speed Dating"
+knit: (function(input_file, encoding) { out_dir <- 'docs'; rmarkdown::render(input_file, encoding=encoding, output_file=file.path(dirname(input_file), out_dir, 'index.html')) })
 author: "Mehmet Fatih Cagil & Unai Perez"
 header-includes:
   - \usepackage{xcolor}
-output: pdf_document
+output:
+  html_document:
+    keep_md: no
+  pdf_document: default
 ---
 
 ```{r include=F}
