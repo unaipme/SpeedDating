@@ -5,13 +5,14 @@ author: "Mehmet Fatih Cagil & Unai Perez"
 header-includes:
   - \usepackage{xcolor}
 output:
-  # pdf_document: default
+  #pdf_document: default
   rmdformats::readthedown:
     self_contained: true
 ---
 
 ```{r include=F}
 library(stringdist)
+library(mice)
 
 norm.score <- function(row) {
   m <- max(row, na.rm = T)
@@ -85,14 +86,20 @@ speed.dating <- speed.dating[!(is.na(speed.dating$attractive)),]
 
 There seems to be a couple more of patterns. Both age related features are missing in the same observations, but the `d_age` feature describing age difference is there, so we could consider that data is not missing. Oddly enough, these missing observations belong to couples with more than 18 years of difference in age. The last pattern seems to relate the missing values of the ratings given by the partners (`attractive_o` and so on) and the ratings given by the subjects to the partner (`attractive_partner` and so on). But there is no actual connection.
 
-Finally, aside from these patterns, all of the participants that did not respond at all to, at least, one of the blocks. This is only the case for two blocks. The first one is the rating that subject 2 gives subject 1 regarding the five criteria. The second block is the opposite, the ratings subject 1 give to subject 2 regarding those criteria. The features that represent categorically the same meaning (those named the same but starting with "`d_`") do not seem to hold any value for these individuals anyway; they are all assigned, seemingly by default, to the category `[0-5]`. All these observations are also deleted.
+After those patterns, all of the participants that did not respond at all to, at least, one of the blocks will be deleted. This is only the case for two blocks. The first one is the rating that subject 2 gives subject 1 regarding the five criteria. The second block is the opposite, the ratings subject 1 give to subject 2 regarding those criteria. The features that represent categorically the same meaning (those named the same but starting with "`d_`") do not seem to hold any value for these individuals anyway; they are all assigned, seemingly by default, to the category `[0-5]`. All these observations are also deleted.
 
 ```{r include=F}
 speed.dating <- speed.dating[-which(apply(is.na(speed.dating[, 28:33]), 1, all)),]
 speed.dating <- speed.dating[-which(apply(is.na(speed.dating[, 62:67]), 1, all)),]
 ```
 
-\textcolor{red}{what do we do with the remaining missing values? Imputation?}
+Finally, we are going to check those features that represent scores out of 10, this is, those blocks made up of the variables named `_partner` and `_o`. Some of these have many missing values. The one with the most NAs is `shared_interests_partner`, which has `r length(which(is.na(speed.dating$shared_interests_partner)))`. If we look at the values of the equivalent categorical features, all of these NA are assigned to the group `[0-5]`. The missing value could be caused by the subject just not caring too much about that one criterion in particular. So, we have decided to assign `0` to these missing values. The same thing can be applied to the missing values of the features with scores out of 100 (`pref_o` and `_important` blocks).
+
+```{r include=F}
+for (i in c(16:21, 28:33, 40:45, 62:67)) {
+  speed.dating[is.na(speed.dating[,i]), i] <- 0
+}
+```
 
 ## Variable typing and coherence
 
@@ -111,9 +118,8 @@ Some of those subjects, though, just exceed the 100 points by decimals. To avoid
 
 ```{r include=F}
 speed.dating <- speed.dating[-c(which(floor(apply(speed.dating[,16:21], 1, sum)) > 100), which(floor(apply(speed.dating[,40:45], 1, sum)) > 100)),]
-more.than.100 <- which(apply(speed.dating[,16:21], 1, sum) > 100)
-speed.dating[more.than.100,16:21] <- speed.dating[more.than.100,16:21] - ((apply(speed.dating[more.than.100,16:21], 1, sum) - 100) / 6)
-speed.dating[more.than.100,40:45] <- speed.dating[more.than.100,40:45] - ((apply(speed.dating[more.than.100,40:45], 1, sum) - 100) / 6)
+speed.dating[which(apply(speed.dating[,16:21], 1, sum) > 100),16:21] <- speed.dating[which(apply(speed.dating[,16:21], 1, sum) > 100),16:21] - ((apply(speed.dating[which(apply(speed.dating[,16:21], 1, sum) > 100),16:21], 1, sum) - 100) / 6)
+speed.dating[which(apply(speed.dating[,40:45], 1, sum) > 100),40:45] <- speed.dating[which(apply(speed.dating[,40:45], 1, sum) > 100),40:45] - ((apply(speed.dating[which(apply(speed.dating[,40:45], 1, sum) > 100),40:45], 1, sum) - 100) / 6)
 ```
 
 Finally, seeing that some of the types automatically assigned to the features by R when reading the file are wrong, we decided to change them. Also, we have discussed whether the score features should be considered factors but, due to one process run for feature extraction, numbers with decimals are obtained. Some come already with decimals from the file, too. We have decided that it would obviously cause innaccuracy, so scores will be considered as numeric values. We already have categorical values out of the box for scores anyway.
@@ -164,4 +170,14 @@ speed.dating$age <- NULL
 speed.dating$age_o <- NULL
 speed.dating$d_age <- NULL
 speed.dating$expected_num_interested_in_me <- NULL
+```
+
+## Data imputation
+
+After the all the preprocessing so far, only `r length(which(sapply(speed.dating, anyNA)))` features with NAs are left. These have been imputed using the MICE imputation method, using the five criteria parameters and the `_important` block as the only supplementary variables. Using the whole dataset slows down the whole process and makes it last up to 30 times more. Using only these features still gives realistic imputation, so we considered it appropriate.
+
+```{r include=F}
+mice.speed.dating <- mice(speed.dating[,c(which(sapply(speed.dating, anyNA)), 37:42, 47:52)], method = 'pmm', seed = 500)
+mice.speed.dating.complete <- complete(mice.speed.dating)
+speed.dating[, which(sapply(speed.dating, anyNA))] <- mice.speed.dating.complete[,1:length(which(sapply(speed.dating, anyNA)))]
 ```

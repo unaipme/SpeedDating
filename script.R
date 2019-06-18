@@ -1,38 +1,7 @@
-### Some values of variable "field" are the same but written differently. Like:
-###   Business- MBA and Business [MBA], ELECTRICAL ENGINEERING and electrical engineering
-###   Finance and Finanace
-###   Basically, typos, case mismatches
-### Question marks (?) are used for missing values. There are no explicit NAs or empty cells.
-### (Single) Quotation marks should be removed
-
-#### Treatment of lost values
-
-### 
-
-#### treatmeant of anomalous values
-
-#### treatment of incoherent or incorrect values
-
-#### elimination of irrelevant variables
-
-#### (possible) elimination of redundant variables
-
-#### coding of non-continuous or non-ordered variables (nominal or binary)
-
-#### extraction of new variables that can be useful
-
-#### normalization of the variables (e.g. standardization)
-
-#### transformation of the variables (e.g. correction of skewness and/or kurtosis)
-
-
-##### As initial procedure, and seeing that most of the features are categorical (factor) or booleans (logical),
-#####   Naïve Bayes classifier can be applied to see something. A generalized linear model can be also used to
-#####   find the correlations between features and outcome.
-
-#we should start with converting the similar information into 1 consistent shape.
-#setwd("C:/Users/mehme/Documents/GitHub/SpeedDating")
 library(stringdist)
+library(mice)
+library(missForest)
+library(chemometrics)
 
 speed.dating <- read.csv("speeddating.csv", na.strings = c("", "?"))
 
@@ -40,7 +9,7 @@ speed.dating <- read.csv("speeddating.csv", na.strings = c("", "?"))
 names(speed.dating)[which(names(speed.dating) %in% c("sinsere_o", "ambitous_o", "d_sinsere_o", "d_ambitous_o", "ambtition_important", "d_ambtition_important"))] <- 
   c("sincere_o", "ambitious_o", "d_sincere_o", "d_ambitious_o", "ambition_important", "d_ambition_important")
 
-### Missing data
+### MISSING DATA
 
 summary(speed.dating)
 summary(speed.dating[,sapply(speed.dating, anyNA)])
@@ -108,10 +77,23 @@ unique(speed.dating[which(apply(is.na(speed.dating[, 62:67]), 1, all)),68:73])
 # Out they go
 speed.dating <- speed.dating[-which(apply(is.na(speed.dating[, 62:67]), 1, all)),]
 
-# And finally, no one declined to responde here. So, the cleansening is done
+# And finally, no one declined to respond here. So, the cleansening is done
 table(apply(is.na(speed.dating[, 74:90]), 1, all))
 
-### Value coherence and typing
+# Features representing scores from 0 to 10 have NA values. This is the case for blocks "_partner" and "_o".
+# For example, "shared_interests_partner" has the largest amount of NAs among these, 861.
+# The thing is, the equivalent categorical value of these features do not have any missing value.
+unique(speed.dating[is.na(speed.dating$shared_interests_partner),c("d_shared_interests_partner")])
+# Moreover, all of the NA values are assigned to group "[0-5]". Instead of performing imputation on these,
+# we are filling these values with 0. We think that, if subjects did not want to waste any time filling this question,
+# they must really not care about these criteria.
+# The same thing can be applied to scores out of 100, "pref_o" and "_important" blocks.
+for (i in c(16:21, 28:33, 40:45, 62:67)) {
+  speed.dating[is.na(speed.dating[,i]), i] <- 0
+}
+# The rest of the columns with missing values will be imputed later on
+
+### VARIABLE COHERENCE AND TYPING
 
 # The variables of the summary below are scores out of 10, but they all have values over 10.
 summary(speed.dating[,c("gaming", "funny_o", "attractive_o", "reading")])
@@ -145,9 +127,8 @@ unique(speed.dating[c(which(floor(apply(speed.dating[,16:21], 1, sum)) > 100), w
 speed.dating <- 
   speed.dating[-c(which(floor(apply(speed.dating[,16:21], 1, sum)) > 100), which(floor(apply(speed.dating[,40:45], 1, sum)) > 100)),]
 # Now, to avoid future problems with those people that exceed the 100 points by some digits,
-more.than.100 <- which(apply(speed.dating[,16:21], 1, sum) > 100)
-speed.dating[more.than.100,16:21] <- speed.dating[more.than.100,16:21] - ((apply(speed.dating[more.than.100,16:21], 1, sum) - 100) / 6)
-speed.dating[more.than.100,40:45] <- speed.dating[more.than.100,40:45] - ((apply(speed.dating[more.than.100,40:45], 1, sum) - 100) / 6)
+speed.dating[which(apply(speed.dating[,16:21], 1, sum) > 100),16:21] <- speed.dating[which(apply(speed.dating[,16:21], 1, sum) > 100),16:21] - ((apply(speed.dating[which(apply(speed.dating[,16:21], 1, sum) > 100),16:21], 1, sum) - 100) / 6)
+speed.dating[which(apply(speed.dating[,40:45], 1, sum) > 100),40:45] <- speed.dating[which(apply(speed.dating[,40:45], 1, sum) > 100),40:45] - ((apply(speed.dating[which(apply(speed.dating[,40:45], 1, sum) > 100),40:45], 1, sum) - 100) / 6)
 
 # Before continuing to feature selection and extraction, let's see if all features are correctly typed
 sapply(speed.dating, class)
@@ -155,8 +136,11 @@ sapply(speed.dating, class)
 speed.dating$has_null <- as.logical(speed.dating$has_null)
 speed.dating$wave <- as.factor(speed.dating$wave)
 speed.dating$samerace <- as.logical(speed.dating$samerace)
+speed.dating$decision <- as.logical(speed.dating$decision)
+speed.dating$decision_o <- as.logical(speed.dating$decision_o)
+speed.dating$match <- as.logical(speed.dating$match)
 
-### Feature selection and extraction
+### FEATURE EXTRACTION / SELECTION
 
 # Now the out of 100 scores need to be normalized. To do so, we take the highest score and treat it as the maximum score.
 # Then, normalize from it. This function will do it for us.
@@ -212,51 +196,30 @@ for (i in c(4, 6, 7, 14)) {
 speed.dating$field <- NULL
 
 # We are also getting rid of these features. We don't need "age", "age_o" or "d_age" if we have "d_d_age", which
-# we find much more representative. And "expected_num_interested_in_me" has waaay too many NA's.
+# we find much more representative. And "expected_num_interested_in_me" has waaaay too many NA's.
 speed.dating$age <- NULL
 speed.dating$age_o <- NULL
 speed.dating$d_age <- NULL
 speed.dating$expected_num_interested_in_me <- NULL
 
-colnames(datingData)
-head(datingData)
-for (i in 1:ncol(datingData)) { #Missing Values was representing as ? and it was converted as NA 
-  if(length(which(datingData[,i] == "?"))>0) datingData[which(datingData[,i] == "?"),i] = NA 
-} 
-summary(datingData)
-str(datingData) 
+### DATA IMPUTATION
 
-#Data Transformation
-datingData <- datingData %>% mutate(has_null = as.factor(has_null), ##I "assumed" age should be integer, 
-                                   age = as.integer(age))
+# There are only 5 columns with NAs left
+which(sapply(speed.dating, anyNA))
 
-#Creating Numeric Dataset
-datingDataNum <- data.frame(datingData$d_age, datingData$age)
+# After deleting all useless features and instances, let's impute the missing values. First, we use MICE.
+# MICE performs mixed imputation (mixed variables types) and is not determinist.
+mice.speed.dating <- mice(speed.dating[,c(which(sapply(speed.dating, anyNA)), 37:42, 47:52)], method = 'pmm', seed = 500)
+mice.speed.dating.complete <- complete(mice.speed.dating)
+mice.speed.dating.complete[apply(speed.dating, 1, anyNA),]
+# The imputed values seem right to us
+speed.dating[, which(sapply(speed.dating, anyNA))] <- mice.speed.dating.complete[,1:length(which(sapply(speed.dating, anyNA)))]
 
-#Missing Value Detection
-aggr_plot <- aggr(datingData, col=c('green','orange'), numbers=TRUE, sortVars=TRUE, 
-                  labels=names(datingData), cex.axis=.5, gap=3, 
-                  ylab=c("Histogram of missing data","Pattern"))
+### OUTLIER DETECTION
 
-#Missing Value Imputation for Numeric Variables by MICE
-imputed_Data <- mice(datingDataNum, m=5, maxit = 50, method = 'pmm', seed = 500)
-completeData <- complete(imputed_Data,2)
-sum(is.na(completeData))
-datingData$age = completeData$datingData.age
-datingDataNum$age = completeData$datingData.age
-sum(is.na(datingDataNum))
-
-#Missing Value Imputation for Categoric Variables by Random Forest
-dd = datingData
-dataFac=dd %>% mutate_if(is.character, as.factor)
-mfImp = missForest(dataFac);
-datingImp <- mfImp$ximp
-sum(is.na(datingImp))
-
-#Outlier Detection
-#Detect multivariate outliers via Mahalanobis distance
-#Outlier detection holds for numerical values only
-outliers <- Moutlier(datingDataNum, quantile = 0.975, plot = TRUE)
+# Detect multivariate outliers via Mahalanobis distance
+# Outlier detection holds for numerical values only
+dating.outliers <- Moutlier(speed.dating[,which(sapply(speed.dating, is.numeric))], quantile = 0.975, plot = TRUE)
 Classic.Mahalanobis <- table(factor(outliers$md > outliers$cutoff, labels=c("Not Outlier", "Outlier")))
 Robust.Mahalanobis <- table(factor(outliers$rd > outliers$cutoff, labels=c("Not Outlier", "Outlier")))
 c <- rbind(Classic.Mahalanobis, Robust.Mahalanobis) 
@@ -272,8 +235,6 @@ datingDataNum[outliers$md >= outliers$cutoff & outliers$rd >= outliers$cutoff,]
 
 #put data to their original location for all the variables
 datingData$d_age <- DatingDataNum$datingData.d_age
-
-
 
 
 
