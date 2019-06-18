@@ -5,6 +5,7 @@ library(nnet)
 library(caret)
 library(FactoMineR)
 library(shape)
+library(e1071)
 
 speed.dating <- read.csv("speeddating.csv", na.strings = c("", "?"))
 
@@ -297,3 +298,44 @@ cbind(prediction, speed.dating$match[-learn])
 table(prediction, speed.dating$match[-learn])
 
 #model.nnet0 <- multinom(match ~ , data=speed.dating, subset=learn, maxit=200)
+
+### BAYES
+
+bayes.model <- naiveBayes(match ~ ., data=speed.dating[learn,])
+
+#the apparent(training) error
+bayes.prediction <- predict(bayes.model, newdata=speed.dating[learn,-115]) #115th col is the match
+table(bayes.prediction, original=speed.dating$match[learn])
+#test(prediction) error
+bayes.prediction <- predict(bayes.model, newdata=speed.dating[-learn,-115])
+table(bayes.prediction, original=speed.dating$match[-learn])
+
+### KNN !!Not sure if something is wrong with the code or just my computer crashes; I hope its my computer not the code...
+#NOT SURE ABOUT THE CATEGORICAL DATA, should we exclude them or not?
+##Sampling
+set.seed(333)
+index <- createDataPartition( y =speed.dating$match, p= 0.75, list= FALSE)
+knn.training <- speed.dating[index,]
+knn.test <- speed.dating[-index,]
+
+prop.table(table(knn.training$match)) * 100
+prop.table(table(speed.dating$match)) * 100
+
+#knn reqs variables to be normalized or scaled. Lets go with centralizing and scaling
+knn.train <- knn.training[,names(knn.training) != "match"]
+knn.processed <- preProcess(x = knn.train, method = c("center", "scale"))
+
+##Training & Control
+#define the control
+control <- trainControl(method="repeatedcv", repeats = 3)
+knnFit <- train(match ~ ., data= knn.training, method= "knn", trControl= control, preProcess= c("center", "scale"), tuneLength = 20)
+knnFit
+#Couldnt reach this far but this should give the number of neighbours vs accuracy
+plot(knnFit) 
+
+knnPredict <- predict(knnFit, newdata = knn.test)
+confusionMatrix(knnPredict, knn.test$match)
+mean(knnPredict == knn.test$match)
+
+
+
