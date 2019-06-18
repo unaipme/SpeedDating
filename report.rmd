@@ -1,22 +1,22 @@
 ---
 title: "Speed Dating"
-knit: (function(input_file, encoding) { out_dir <- 'docs'; rmarkdown::render(input_file, encoding=encoding, output_file=file.path(dirname(input_file), out_dir, 'index.html')) })
+knit: (function(input_file, encoding) { rmarkdown::render(input_file, encoding=encoding, output_file=file.path(dirname(input_file), "docs", 'index.html')) })
 author: "Mehmet Fatih Cagil & Unai Perez"
 header-includes:
   - \usepackage{xcolor}
 output:
-  html_document:
-    keep_md: no
-  pdf_document: default
+  # pdf_document: default
+  rmdformats::readthedown:
+    self_contained: true
 ---
 
 ```{r include=F}
 library(stringdist)
 
 norm.score <- function(row) {
-  m <- max(row)
-  s <- sum(row)
-  lapply(row, function(x) 10 * x / (m * (1 + (100 - s) / 100)))
+  m <- max(row, na.rm = T)
+  s <- sum(row, na.rm=T)
+  lapply(row, function(x) 10 * ifelse(is.na(x), 0, x) / (m * (1 + (100 - s) / 100)))
 }
 
 speed.dating <- read.csv("speeddating.csv", na.strings = c('', '?'))
@@ -105,11 +105,34 @@ speed.dating$attractive_o[!(is.na(speed.dating$attractive_o)) & speed.dating$att
 speed.dating$reading[!(is.na(speed.dating$reading)) & speed.dating$reading > 10] <- 10
 ```
 
-On the other hand, the block of features representing the preferences of the subjects regarding the five criteria (`_important` block for subject 1 and `pref_o_` block for subject 2) are scores out of 100. The rest of scores are out of 10. But, as explained in the introduction, these features work differently. If the out of 100 scores were regular scores, it would be better to multiply by 10 the out of 10 scores to avoid inaccuracies. In this case, we have decided to use the following formula to turn each feature in its proportional score between 0 and 10, based on the criteria with the highest score:
+As explained in the introduction, there is a block of features that represent the preferences of the subjects by distributing 100 points among them. This is not always the case, though. Some participants did not actually completely use the 100 points, but this is addressed later in the document. The problem comes from those that used more than 100 points. These guys clearly do not know how to add up. For the sake of consistency, we have decided to remove these observations. Before, we have checked their field of studies just out of curiosity, and many of these are mathematicians and engineers. Future is bright!
 
-$$ score^{(i)}_{10} = \frac{10 \times score^{(i)}_{100}}{\max(score_{100}) \times (1 + \frac{100 - \sum_{i'} score^{(i')}_{100}}{100})}$$
+Some of those subjects, though, just exceed the 100 points by decimals. To avoid having problems in the future, these decimals have been substracted from them so that their score will add up to exactly 100. 
 
-It must be noted that a penalization has been added to the denominator because some subjects did not distribute the available 100 points (as explained in the introduction) completely.
+```{r include=F}
+speed.dating <- speed.dating[-c(which(floor(apply(speed.dating[,16:21], 1, sum)) > 100), which(floor(apply(speed.dating[,40:45], 1, sum)) > 100)),]
+more.than.100 <- which(apply(speed.dating[,16:21], 1, sum) > 100)
+speed.dating[more.than.100,16:21] <- speed.dating[more.than.100,16:21] - ((apply(speed.dating[more.than.100,16:21], 1, sum) - 100) / 6)
+speed.dating[more.than.100,40:45] <- speed.dating[more.than.100,40:45] - ((apply(speed.dating[more.than.100,40:45], 1, sum) - 100) / 6)
+```
+
+Finally, seeing that some of the types automatically assigned to the features by R when reading the file are wrong, we decided to change them. Also, we have discussed whether the score features should be considered factors but, due to one process run for feature extraction, numbers with decimals are obtained. Some come already with decimals from the file, too. We have decided that it would obviously cause innaccuracy, so scores will be considered as numeric values. We already have categorical values out of the box for scores anyway.
+
+```{r include=F}
+speed.dating$has_null <- as.logical(speed.dating$has_null)
+speed.dating$wave <- as.factor(speed.dating$wave)
+speed.dating$samerace <- as.logical(speed.dating$samerace)
+```
+
+## Feature selection and extraction
+
+The block of features representing the preferences of the subjects regarding the five criteria (`_important` block for subject 1 and `pref_o_` block for subject 2) are scores out of 100. The rest of scores are out of 10. But, as explained in the introduction, these features work differently. If the out of 100 scores were regular scores, it would be better to multiply by 10 the out of 10 scores to avoid inaccuracies. In this case, we have decided to use the following formula to turn each feature in its proportional score between 0 and 10, based on the criteria with the highest score:
+
+$$ score^{(i)}_{10} = \frac{10 \times score^{(i)}_{100}}{\max(score_{100}) \times \lambda} $$
+
+Where $\lambda$ represents a penalization that has been added to the denominator because some subjects did not distribute the available 100 points (as explained in the introduction) completely. $\lambda$ is calculated as shown below:
+
+$$ \lambda = 1 + \frac{100 - \sum_{i'} score^{(i')}_{100}}{100} $$
 
 ```{r include=F}
 for (i in 1:nrow(speed.dating)) {
@@ -118,9 +141,13 @@ for (i in 1:nrow(speed.dating)) {
 }
 ```
 
-typing
+This transformation would need to be stored in completely different variables, but we have decided to do without the original out of 100 scores. Thus, they have been overwritten. That has been the case too for the equivalent categorical variables (the ones with same name but starting with `d_`), which have been replaced using the same categories as the rest of the categorical variables: `[0-5]`, `[6-8]` and `[9-10]`. We think these represent the different feelings a person can have towards something appropriately; they could be translated as "dislike", "like", and "love".
 
-## Feature selection (and extraction?)
+```{r include=F}
+for (i in c(16:21, 40:45)) {
+  speed.dating[,i+6] <- cut(speed.dating[,i], breaks=c(0,5,8,10), include.lowest = T, labels=c("[0-5]","[6-8]","[9-10]"))
+}
+```
 
 Feature `field` brings interesting information to the table. With this information, we could find correlation between the field of study of the subjects and, maybe, the probability of this being influential in the final choice. Nevertheless, the actual categories of the feature are filled with typos, differently formatted but equivalent answers, and globally or specifically ambiguous answers. For example, `finance` and `finanace` are two different categories, as well as `finance/economics` and `finance&economics`, and, finally, there are categories just labelled as `money` or the different categories `english` and `english education`, whose differences we are not really able to tell.
 
@@ -128,4 +155,13 @@ We tried performing some sort of entity resolution by transforming categories to
 
 ```{r include=F}
 speed.dating$field <- NULL
+```
+
+Now that we are discarding features, we decide to discard the features `age`, `age_o` and `d_age`. We do not think the actual ages are all that important, or event the age difference per se; variable `d_d_age`, categorical representation of the age difference, will do just fine. Also, feature `expected_num_interested_in_me` will be discarded, due to its `r length(which(is.na(speed.dating$expected_num_interested_in_me)))` missing variables. The rest of features, a total of `r ncol(speed.dating) - 4`, are staying. We think that having different representations of the same data directly from the raw file saves us time and effort, and opens up the possibility to apply different models without more extracted features.
+
+```{r include=F}
+speed.dating$age <- NULL
+speed.dating$age_o <- NULL
+speed.dating$d_age <- NULL
+speed.dating$expected_num_interested_in_me <- NULL
 ```

@@ -111,7 +111,7 @@ speed.dating <- speed.dating[-which(apply(is.na(speed.dating[, 62:67]), 1, all))
 # And finally, no one declined to responde here. So, the cleansening is done
 table(apply(is.na(speed.dating[, 74:90]), 1, all))
 
-### Value coherence
+### Value coherence and typing
 
 # The variables of the summary below are scores out of 10, but they all have values over 10.
 summary(speed.dating[,c("gaming", "funny_o", "attractive_o", "reading")])
@@ -132,18 +132,48 @@ speed.dating$funny_o[!(is.na(speed.dating$funny_o)) & speed.dating$funny_o > 10]
 speed.dating$attractive_o[!(is.na(speed.dating$attractive_o)) & speed.dating$attractive_o > 10] <- 10
 speed.dating$reading[!(is.na(speed.dating$reading)) & speed.dating$reading > 10] <- 10
 
+# Change of topic. There is two blocks of features that represent how the participants distribute a 100 points
+# among their preferences. But there seems to be some smart asses between the participants.
+# There are, exactly, 123 of these.
+length(which(floor(apply(speed.dating[,16:21], 1, sum)) > 100)) + 
+  length(which(floor(apply(speed.dating[,40:45], 1, sum)) > 100))
+# We use floor because some of these exceed the 100 points by just decimals, which can happen if you try to distribute
+# the 100 points in fractions. That's okay. We decide to remove the rest of these guys to avoid problems.
+# But not before seeing what their field of study is:
+unique(speed.dating[c(which(floor(apply(speed.dating[,16:21], 1, sum)) > 100), which(floor(apply(speed.dating[,40:45], 1, sum)) > 100)),"field"])
+# Some mathematicians and engineers there... The future is bright if they do not know how to add up to 100.
+speed.dating <- 
+  speed.dating[-c(which(floor(apply(speed.dating[,16:21], 1, sum)) > 100), which(floor(apply(speed.dating[,40:45], 1, sum)) > 100)),]
+# Now, to avoid future problems with those people that exceed the 100 points by some digits,
+more.than.100 <- which(apply(speed.dating[,16:21], 1, sum) > 100)
+speed.dating[more.than.100,16:21] <- speed.dating[more.than.100,16:21] - ((apply(speed.dating[more.than.100,16:21], 1, sum) - 100) / 6)
+speed.dating[more.than.100,40:45] <- speed.dating[more.than.100,40:45] - ((apply(speed.dating[more.than.100,40:45], 1, sum) - 100) / 6)
+
+# Before continuing to feature selection and extraction, let's see if all features are correctly typed
+sapply(speed.dating, class)
+# And we think not. Let's fix this.
+speed.dating$has_null <- as.logical(speed.dating$has_null)
+speed.dating$wave <- as.factor(speed.dating$wave)
+speed.dating$samerace <- as.logical(speed.dating$samerace)
+
+### Feature selection and extraction
+
 # Now the out of 100 scores need to be normalized. To do so, we take the highest score and treat it as the maximum score.
 # Then, normalize from it. This function will do it for us.
 # Some of the subjects, though, did not distribute completely the 100 points. These scores will be penalized.
 norm.score <- function(row) {
-  m <- max(row)
-  s <- sum(row)
+  m <- max(row, na.rm = T)
+  s <- sum(row, na.rm=T)
   lapply(row, function(x) 10 * ifelse(is.na(x), 0, x) / (m * (1 + (100 - s) / 100)))
 }
 # This needs to be applied for column blocks "_important" and "pref_o_", corresponding to indexes 16:21 and 40:45
 for (i in 1:nrow(speed.dating)) {
   speed.dating[i,16:21] <- norm.score(speed.dating[i, 16:21])
   speed.dating[i,40:45] <- norm.score(speed.dating[i, 40:45])
+}
+# Let's give corresponding new values to the equivalent categorical features
+for (i in c(16:21, 40:45)) {
+  speed.dating[,i+6] <- cut(speed.dating[,i], breaks=c(0,5,8,10), include.lowest = T, labels=c("[0-5]","[6-8]","[9-10]"))
 }
 
 # Now, looking at the different possible values of "field", it's a mess!
@@ -181,6 +211,12 @@ for (i in c(4, 6, 7, 14)) {
 # There is too much ambiguity in the categories. Let's just scrap the feature.
 speed.dating$field <- NULL
 
+# We are also getting rid of these features. We don't need "age", "age_o" or "d_age" if we have "d_d_age", which
+# we find much more representative. And "expected_num_interested_in_me" has waaay too many NA's.
+speed.dating$age <- NULL
+speed.dating$age_o <- NULL
+speed.dating$d_age <- NULL
+speed.dating$expected_num_interested_in_me <- NULL
 
 colnames(datingData)
 head(datingData)
@@ -189,7 +225,6 @@ for (i in 1:ncol(datingData)) { #Missing Values was representing as ? and it was
 } 
 summary(datingData)
 str(datingData) 
-# TODO: We need to make a decision between factor and interger for variable types.
 
 #Data Transformation
 datingData <- datingData %>% mutate(has_null = as.factor(has_null), ##I "assumed" age should be integer, 
