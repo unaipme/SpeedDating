@@ -1,12 +1,14 @@
 ---
 title: "Speed Dating"
+knit: (function(input_file, encoding) { rmarkdown::render(input_file, encoding=encoding, output_file=file.path(dirname(input_file), "docs", 'index.html')) })
 author: "Mehmet Fatih Cagil & Unai Perez"
 header-includes:
   - \usepackage{xcolor}
   - \usepackage{float}
   - \renewcommand{\baselinestretch}{1.15}
 output:
-  pdf_document: default
+  rmdformats::readthedown:
+    self_contained: true
 ---
 
 ```{r include=F}
@@ -203,9 +205,10 @@ speed.dating[, which(sapply(speed.dating, anyNA))] <- mice.speed.dating.complete
 
 ## Outlier detection
 
-The dataset has `r ncol(speed.dating)` left after the preprocessing. They are still plenty, so trying to find univariate outliers is not only annoying, but also useless. For the multivariate outlier detection, the Mahalanobis distance has been used. Figure \ref{fig:multivar-outliers} shows a graphical representation of the distances of each observation, where the red dots represent the observations with a match, and the blue ones observations without a match. On plain sight, there does not seem to be any correlation between the outcome and the distance (or the _outlierness_, we could say). If anything, we can state that the few that stand out the most are non-matches. The 2.5% of the observations with the highest Mahalanobis distance, shown in the figure \ref{fig:multivar-outliers} above the line, will be considered outliers and removed.
+The dataset has `r ncol(speed.dating)` left after the preprocessing. They are still plenty, so trying to find univariate outliers is not only annoying, but also useless. For the multivariate outlier detection, the Mahalanobis distance has been used. The figure below shows a graphical representation of the distances of each observation, where the red dots represent the observations with a match, and the blue ones observations without a match. On plain sight, there does not seem to be any correlation between the outcome and the distance (or the _outlierness_, we could say). If anything, we can state that the few that stand out the most are non-matches. The 2.5% of the observations with the highest Mahalanobis distance, shown in the figure above the line, will be considered outliers and removed.
 
-```{r multivar-outliers, echo=F, fig.cap="\\label{fig:multivar-outliers}Graphical representation of the Mahalanobis distances for each observation", fig.align="center", fig.height=3.5, fig.width=5}
+<center>
+```{r multivar-outliers, echo=F, fig.cap="\\label{fig:multivar-outliers}Graphical representation of the Mahalanobis distances for each observation", fig.align="center"}
 dating.outliers <- Moutlier(scale(speed.dating[,sapply(speed.dating, is.numeric)]), plot=F, quantile = 0.975)
 par(mfrow=c(1,2))
 plot(dating.outliers$md, main="Mahalanobis Distance", ylab="Distance", xlab="", col=ifelse(speed.dating$match, "orangered1", "royalblue1"), las=1, cex.axis=.75, pch=20, ylim=c(0, max(dating.outliers$rd)), xaxt="n", cex.main=.8, cex.lab = .7)
@@ -214,6 +217,7 @@ cutoff <- sort(dating.outliers$rd, decreasing = T)[floor(nrow(speed.dating) * 0.
 abline(h = cutoff, lty=2, col="red4", lwd=2.25)
 par(mfrow=c(1,1))
 ```
+</center>
 
 ```{r include=F}
 speed.dating <- speed.dating[-order(dating.outliers$rd, decreasing = T)[1:floor(nrow(speed.dating) * 0.025)],]
@@ -221,7 +225,7 @@ speed.dating <- speed.dating[-order(dating.outliers$rd, decreasing = T)[1:floor(
 
 ## Data visualization
 
-PCA allows us to see a representation of the dataset in two dimension of the data. With this, we will perform a few clustering methods and see if we can extract something useful out of it. PCA can only be used with numeric explanatory variables, so the variable `match` was added as qualitative suplementary variable. This means a total of `r length(which(sapply(speed.dating, is.numeric))) + 1` variables. Figure \ref{fig:pca-var-repr} shows the representation in the first factorial plane of _only_ the 10 variables with the most representation and, still, they are not really well represented, probably due to the high dimensionality of the data. In figure \ref{fig:pca-ind-repr} the representation of the individuals and the categories of the `match` supplementary variable can be seen. None of those seems to be too tied to any of the dimensions.
+PCA allows us to see a representation of the dataset in two dimension of the data. With this, we will perform a few clustering methods and see if we can extract something useful out of it. PCA can only be used with numeric explanatory variables, so the variable `match` was added as qualitative suplementary variable. This means a total of `r length(which(sapply(speed.dating, is.numeric))) + 1` variables. The figure below shows the representation in the first factorial plane of _only_ the 10 variables with the most representation and, still, they are not really well represented, probably due to the high dimensionality of the data.
 
 ```{r include=F}
 speed.dating.pca <- speed.dating[,c(which(sapply(speed.dating, is.numeric)), 112)]
@@ -232,7 +236,8 @@ pca.output <- PCA(speed.dating.pca, quali.sup = c(53), graph = F)
 pca.best.repr.vars <- order(sqrt(pca.output$var$coord[,1]^2 + pca.output$var$coord[,2] ^ 2), decreasing = T)[1:10]
 ```
 
-```{r echo=F, fig.height=3.75, fig.cap="\\label{fig:pca-var-repr}Variable representation in the first factorial plane", fig.pos="H", out.extra="", fig.align="center"}
+<center>
+```{r echo=F, fig.cap="\\label{fig:pca-var-repr}Variable representation in the first factorial plane", fig.pos="H", out.extra="", fig.align="center", fig.height=4.25}
 plot(pca.output$var$coord, col=0, xlim=c(-2.5,1.5), ylim=c(-.8,.8), las=1, cex.axis=.7, cex.lab=.8, xlab="", ylab="")
 abline(h=0, col="gray")
 abline(v=0, col="gray")
@@ -240,8 +245,12 @@ plotellipse(1, 1)
 invisible(Arrows(0, 0, pca.output$var$coord[pca.best.repr.vars,1], pca.output$var$coord[pca.best.repr.vars,2], arr.type = "simple", col=rainbow(10)))
 legend("topleft", legend=row.names(pca.output$var$coord[pca.best.repr.vars,]), col=rainbow(10), lty=1, cex=.7, bg="white")
 ```
+</center>
 
-```{r echo=F, fig.cap="\\label{fig:pca-ind-repr}Representation of individuals in first factorial plane", fig.height=3.25, fig.width=4, fig.pos="H", out.extra="", fig.align="center"}
+In the figure below, the representation of the individuals and the categories of the `match` supplementary variable can be seen. None of those seems to be too tied to any of the dimensions.
+
+<center>
+```{r echo=F, fig.cap="\\label{fig:pca-ind-repr}Representation of individuals in first factorial plane", fig.pos="H", out.extra=""}
 plot(pca.output$ind$coord, col=0, las=1, cex.axis=.7, cex.lab=.8, xlab="", ylab="")
 grid()
 points(pca.output$ind$coord, col="royalblue1", pch=20)
@@ -249,12 +258,14 @@ abline(h=0)
 abline(v=0)
 
 points(pca.output$quali.sup$coord, col="orangered1", pch=20)
-text(pca.output$quali.sup$coord[,1], pca.output$quali.sup$coord[,2] - 1.2, col="orangered1", labels = c("no match", "match"), cex=.7)
+text(pca.output$quali.sup$coord[,1], pca.output$quali.sup$coord[,2] + 0.7, col="orangered1", labels = c("no match", "match"))
 ```
+</center>
 
-The data cloud shown in figure \ref{fig:pca-ind-repr} looks like no more than a blob. At least visually, it is impossible to tell the clusters, if there are any. Probabilistic clustering methods like k-means or EM probably will not work very well. Indeed, in figure \ref{fig:kmeans}, it is obvious how, for small numbers, it classifies pretty linearly, but starts losing quality as `k` increases (the Calinski-Harabassz index can be seen in the title). A hierarchical clustering method could be more fitting. However, judging by the ibtained CH indices for the same set of `k`, the results are worse.
+The data cloud shown in the figure looks like no more than a blob. At least visually, it is impossible to tell the clusters, if there are any. Probabilistic clustering methods like k-means or EM probably will not work very well. Indeed, in the figure below, it is obvious how, for small numbers, it classifies pretty linearly, but starts losing quality as `k` increases (the Calinski-Harabassz index can be seen in the title). A hierarchical clustering method could be more fitting. However, judging by the ibtained CH indices for the same set of `k`, the results are worse.
 
-```{r echo=F, fig.height=2, fig.cap="\\label{fig:kmeans}Result of k-means with k = [2,6]"}
+<center>
+```{r echo=F, fig.cap="\\label{fig:kmeans}Result of k-means with k = [2,6]", fig.height=3}
 mar <- par("mar")
 par(mfrow=c(1,5), mar=c(1,0,1,0))
 for (k in 2:6) {
@@ -265,6 +276,7 @@ for (k in 2:6) {
 }
 par(mfrow=c(1,1), mar=mar)
 ```
+</center>
 
 # Articifial Neural Networks
 

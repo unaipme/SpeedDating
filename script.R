@@ -6,6 +6,8 @@ library(caret)
 library(FactoMineR)
 library(shape)
 library(e1071)
+library(fpc)
+library(cclust)
 
 speed.dating <- read.csv("speeddating.csv", na.strings = c("", "?"))
 
@@ -255,18 +257,79 @@ speed.dating <- speed.dating[-order(dating.outliers$rd, decreasing = T)[1:floor(
 
 ### EXPLORATORY DATA ANALYSIS (VISUALIZATION)
 
-names(speed.dating)
+# Okay, for PCA we are just taking the all the numeric features available (we are not going to just omit features from this),
+# and also the "match" feature as qualitative supplementary variable.
 speed.dating.pca <- speed.dating[,c(which(sapply(speed.dating, is.numeric)), 112)]
-pca.output <- PCA(speed.dating.pca, quali.sup = c(53), graph = T)
+# For some reason, the "scale" function fails. Then we will center the data OUR way.
+#speed.dating.pca[,-53] <- scale(speed.dating[,-53])
+for (i in 1:52) {
+  speed.dating.pca[,i] <- speed.dating.pca[,i] - mean(speed.dating.pca[,i])
+}
 
+par(mfrow=c(1,2))
+pca.output <- PCA(speed.dating.pca, quali.sup = c(53), graph = T)
+par(mfrow=c(1,1))
+# The hell are those graphs! Let me make my own plots...
+
+# There are too many explanatory variables, so we are going to take those that have the most representation in the 2 first dimensions.
 pca.best.repr.vars <- order(sqrt(pca.output$var$coord[,1]^2 + pca.output$var$coord[,2] ^ 2), decreasing = T)[1:10]
 
+# And plot them!
 plot(pca.output$var$coord, col=0, xlim=c(-2.75,1.75), ylim=c(-1,1))
 abline(h=0, col="gray")
 abline(v=0, col="gray")
 plotellipse(1, 1)
 Arrows(0, 0, pca.output$var$coord[pca.best.repr.vars,1], pca.output$var$coord[pca.best.repr.vars,2], arr.type = "simple", col=rainbow(10))
 legend("topleft", legend=row.names(pca.output$var$coord[pca.best.repr.vars,]), col=rainbow(10), lty=1)
+
+# The first plot shows that the first factorial plane is not really able to represent too much of the
+# inertia of the variables. Anyway, the 10 most represented variables are somewhat mostly influenced by
+# the first dimension
+
+plot(pca.output$ind$coord, col=0)
+abline(h=0, col="gray", lwd=2)
+abline(v=0, col="gray", lwd=2)
+grid()
+points(pca.output$ind$coord, col="royalblue1", pch=20)
+
+points(pca.output$quali.sup$coord, col="orangered1", pch=20)
+text(pca.output$quali.sup$coord[,1], pca.output$quali.sup$coord[,2] + .8, col="orangered1", labels = c("no match", "match"))
+
+# And this plot shows us that the point cloud is all over the place. They do not seem to follow a specific
+# distribution, less so the supplementary qualitative variables, which do not seem to be tied to any dimension
+# particularly. Just the opposite, they are pretty much centered...
+
+# The data points all over the place and visually we are not able to identify any cluster or anything.
+# Probabilistic clustering methods will probably give nothing of value. But let's give a quick try to kmeans.
+
+par(mfrow=c(2,5), mar=c(1,0,1,0))
+for (k in 2:11) {
+  kmeans.res <- cclust(pca.output$ind$coord, centers=k, method = "kmeans")
+  kmeans.ch <- calinhara(pca.output$ind$coord, kmeans.res$cluster)
+  plot(pca.output$ind$coord, col=0, xaxt="n", yaxt="n", xlab="", ylab="", main=paste("k=", k, " (CH=", round(kmeans.ch, 2), ")", sep = ""))
+  points(pca.output$ind$coord, col=rainbow(k)[kmeans.res$cluster])
+}
+par(mfrow=c(1,1), mar=mar)
+
+# And, indeed, the more clusters we add, the less uniform they are and the less they score using the 
+# Calinksi-Harabaszz score. Still, due to the limitations of FactoMineR's PCA, it only calculates the 
+# representation of the first 5 dimensions (unless otherwise specified). The first 5 dimensions only
+# represent up to this percentage of the total inertia:
+sum(pca.output$eig[1:5,2])
+# It is common to accept only dimensions that represent up to the 80% of the inertia.
+# So it's understandable that results are poor. Let's try hierarchical clustering too.
+
+speed.dist <- dist(pca.output$ind$coord)
+speed.hclust <- hclust(d = speed.dist)
+speed.hclust.ch.scores <- rep(NA, 5)
+for (k in 2:6) {
+  speed.hclust.tree <- cutree(speed.hclust, k=k)
+  speed.hclust.ch.scores[k-1] <- calinhara(x = pca.output$ind$coord, clustering = speed.hclust.tree)
+  factoextra::fviz_cluster(list(data = data.frame(pca.output$ind$coord), cluster = speed.hclust.tree),
+                           ellipse.type = "norm", geom = "point", stand = FALSE, main = "", legend=NULL)
+}
+speed.hclust.ch.scores
+# More of the same. Is this dataset "inclusterable"?
 
 ### ARTIFICIAL NEURAL NETWORKS
 
@@ -301,7 +364,8 @@ table(prediction, speed.dating$match[-learn])
 
 ### BAYES
 
-bayes.model <- naiveBayes(match ~ ., data=speed.dating[learn,])
+#bayes.model <- naiveBayes(match ~ ., data=speed.dating[learn,])
+bayes.model <- naiveBayes(match ~ ., data=speed.dating[learn,c(which(sapply(speed.dating, is.factor)), 112)])
 
 #the apparent(training) error
 bayes.prediction <- predict(bayes.model, newdata=speed.dating[learn,-115]) #115th col is the match
@@ -327,7 +391,7 @@ knn.processed <- preProcess(x = knn.train, method = c("center", "scale"))
 
 ##Training & Control
 #define the control
-control <- trainControl(method="repeatedcv", repeats = 3)
+control <- trainControl(method="cv", number = 5)
 knnFit <- train(match ~ ., data= knn.training, method= "knn", trControl= control, preProcess= c("center", "scale"), tuneLength = 20)
 knnFit
 #Couldnt reach this far but this should give the number of neighbours vs accuracy
