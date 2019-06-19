@@ -8,6 +8,7 @@ library(shape)
 library(e1071)
 library(fpc)
 library(cclust)
+library(randomForest)
 
 speed.dating <- read.csv("speeddating.csv", na.strings = c("", "?"))
 
@@ -364,42 +365,98 @@ table(prediction, speed.dating$match[-learn])
 
 ### BAYES
 
-#bayes.model <- naiveBayes(match ~ ., data=speed.dating[learn,])
-bayes.model <- naiveBayes(match ~ ., data=speed.dating[learn,c(which(sapply(speed.dating, is.factor)), 112)])
+##Two ways: i)ignore continuououso variables ii)handle them.
+##We decided to ignore them.
+
+bayes.model <- naiveBayes(match ~ ., data=speed.dating.cat[learn,])
 
 #the apparent(training) error
-bayes.prediction <- predict(bayes.model, newdata=speed.dating[learn,-115]) #115th col is the match
-table(bayes.prediction, original=speed.dating$match[learn])
-#test(prediction) error
-bayes.prediction <- predict(bayes.model, newdata=speed.dating[-learn,-115])
-table(bayes.prediction, original=speed.dating$match[-learn])
+bayes.training <- predict(bayes.model, newdata=speed.dating.cat[learn,-115]) #115th col is the match
+confusionMatrix(bayes.prediction, speed.dating.cat$match[-learn])
 
-### KNN !!Not sure if something is wrong with the code or just my computer crashes; I hope its my computer not the code...
-#NOT SURE ABOUT THE CATEGORICAL DATA, should we exclude them or not?
+#test(prediction) error
+bayes.prediction <- predict(bayes.model, newdata=speed.dating.cat[-learn,-115])
+confusionMatrix(bayes.prediction, speed.dating.cat$match[-learn])
+
+### KNN 
+#the categorical data -- not sure about this, it works without any errors but should we do knn for categorical?
 ##Sampling
 set.seed(333)
-index <- createDataPartition( y =speed.dating$match, p= 0.75, list= FALSE)
-knn.training <- speed.dating[index,]
-knn.test <- speed.dating[-index,]
+cat.index <- createDataPartition( y =speed.dating.cat$match, p= 0.75, list= FALSE)
+cat.training <- speed.dating.cat[cat.index,]
+cat.test <- speed.dating.cat[-cat.index,]
 
-prop.table(table(knn.training$match)) * 100
-prop.table(table(speed.dating$match)) * 100
+prop.table(table(cat.training$match)) * 100
+prop.table(table(speed.dating.cat$match)) * 100
 
-#knn reqs variables to be normalized or scaled. Lets go with centralizing and scaling
-knn.train <- knn.training[,names(knn.training) != "match"]
-knn.processed <- preProcess(x = knn.train, method = c("center", "scale"))
+#knn reqs variables to be normalized and/or scaled. Lets go with centralizing and scaling
+#cat.train <- cat.training[,names(cat.training) != "match"]
+#centering and scaling is not useful for categorical variables
+#cat.processed <- preProcess(x = cat.train, method = c("conditionalX"))
 
 ##Training & Control
 #define the control
-control <- trainControl(method="cv", number = 5)
-knnFit <- train(match ~ ., data= knn.training, method= "knn", trControl= control, preProcess= c("center", "scale"), tuneLength = 20)
-knnFit
+cat.control <- trainControl(method="cv", number = 5)
+catFit <- train(match ~ ., data= cat.training, method= "knn", trControl= cat.control, preProcess= c("center", "scale"), tuneLength = 20)
+catFit
 #Couldnt reach this far but this should give the number of neighbours vs accuracy
-plot(knnFit) 
+plot(catFit) 
 
-knnPredict <- predict(knnFit, newdata = knn.test)
-confusionMatrix(knnPredict, knn.test$match)
-mean(knnPredict == knn.test$match)
+catPredict <- predict(catFit, newdata = cat.test)
+confusionMatrix(catPredict, cat.test$match)
+mean(catPredict == cat.test$match)
 
+#the continuousususosus data -- works properly
+##Sampling
+set.seed(333)
+cont.index <- createDataPartition( y =speed.dating.cont$match, p= 0.75, list= FALSE)
+cont.training <- speed.dating.cont[cont.index,]
+cont.test <- speed.dating.cont[-cont.index,]
 
+prop.table(table(cont.training$match)) * 100
+prop.table(table(speed.dating.cont$match)) * 100
 
+#knn reqs variables to be normalized and/or scaled. Lets go with centralizing and scaling
+#cont.train <- cont.training[,names(cont.training) != "match"]
+#cont.processed <- preProcess(x = cont.train, method = c("center", "scale"))
+
+##Training & Control
+#define the control
+cont.control <- trainControl(method="cv", number = 5)
+contFit <- train(match ~ ., data= cont.training, method= "knn", trControl= cont.control, preProcess= c("center", "scale"), tuneLength = 20)
+contFit
+#Couldnt reach this far but this should give the number of neighbours vs accuracy
+plot(contFit) 
+
+contPredict <- predict(contFit, newdata = cont.test)
+confusionMatrix(contPredict, cont.test$match)
+mean(contPredict == cont.test$match)
+
+###Random Forest
+
+set.seed(666)
+rf.model1 <- randomForest( match ~ ., data = speed.dating[learn,], ntree = 100, proximity=FALSE)
+rf.model1
+
+#14.83% OOB test error
+
+rf.pred1 <- predict(rf.model1, speed.dating[-learn,], type="class")
+
+ct <- table(Truth=speed.dating[-learn,]$match, Pred = rf.pred1)
+#percentage by class
+prop.table(ct ,1)
+#total percentage corrent
+sum(diag(ct))/sum(ct)
+
+# TODO: try to decrease the oob error with trying different vals for mtry and ntree
+#mtry = number of variables randomly sampled as candidates at each split, default is sqrt(nlearn)
+rf.model2 <- randomForest( match ~ ., data = speed.dating[learn,], ntree = 200, mtry= (sqrt(nlearn))*3,proximity=FALSE, strata=speed.dating[learn,]$match)
+rf.model2
+
+rf.pred2 <- predict(rf.model2, speed.dating[-learn,], type="class")
+
+ct <- table(Truth=speed.dating[-learn,]$match, Pred = rf.pred1)
+#percentage by class
+prop.table(ct ,1)
+#total percentage corrent
+sum(diag(ct))/sum(ct)
