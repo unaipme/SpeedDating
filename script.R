@@ -369,24 +369,26 @@ confusionMatrix(table(prediction, speed.dating.cont$match[-learn]))
 
 ### BAYES
 
+##Two ways: i)ignore continuououso variables ii)handle them.
+##We decided to ignore them.
+
 bayes.model <- naiveBayes(match ~ ., data=speed.dating.cat[learn,])
 
-# The empirical (training) error
-bayes.training <- predict(bayes.model, newdata=speed.dating.cat[learn,-60]) #115th col is the match
-confusionMatrix(bayes.training, speed.dating.cat$match[learn])
+#the apparent(training) error
+bayes.training <- predict(bayes.model, newdata=speed.dating.cat[-learn,]) 
+confusionMatrix(bayes.prediction, speed.dating.cat$match[-learn])
 
-# Test (prediction) error
-bayes.prediction <- predict(bayes.model, newdata=speed.dating.cat[-learn,-60])
+#test(prediction) error
+bayes.prediction <- predict(bayes.model, newdata=speed.dating.cat[-learn,])
 confusionMatrix(bayes.prediction, speed.dating.cat$match[-learn])
 
 ### KNN 
-#the categorical data -- not sure about this, it works without any errors but should we do knn for categorical?
+#the categorical data -- not sure about this, it works without any errors (not sure aout the preprocess) but should we do knn for categorical?
 ##Sampling
-
+set.seed(333)
 cat.index <- createDataPartition( y =speed.dating.cat$match, p= 0.75, list= FALSE)
 cat.training <- speed.dating.cat[cat.index,]
 cat.test <- speed.dating.cat[-cat.index,]
-
 prop.table(table(cat.training$match)) * 100
 prop.table(table(speed.dating.cat$match)) * 100
 
@@ -409,6 +411,7 @@ mean(catPredict == cat.test$match)
 
 #the continuousususosus data -- works properly
 ##Sampling
+set.seed(333)
 cont.index <- createDataPartition( y =speed.dating.cont$match, p= 0.75, list= FALSE)
 cont.training <- speed.dating.cont[cont.index,]
 cont.test <- speed.dating.cont[-cont.index,]
@@ -434,6 +437,7 @@ mean(contPredict == cont.test$match)
 
 ###Random Forest
 
+set.seed(666)
 rf.model1 <- randomForest( match ~ ., data = speed.dating[learn,], ntree = 100, proximity=FALSE)
 rf.model1
 
@@ -447,15 +451,82 @@ prop.table(ct ,1)
 #total percentage corrent
 sum(diag(ct))/sum(ct)
 
-# TODO: try to decrease the oob error with trying different vals for mtry and ntree
-#mtry = number of variables randomly sampled as candidates at each split, default is sqrt(nlearn)
-rf.model2 <- randomForest( match ~ ., data = speed.dating[learn,], ntree = 200, mtry= (sqrt(nlearn))*3,proximity=FALSE, strata=speed.dating[learn,]$match)
+#try to decrease the oob error with trying different vals for mtry and ntree
+#mtry = number of variables randomly sampled as candidates at each split, default is sqrt(ncol(speed.dating))
+rf.model2 <- randomForest( match ~ ., data = speed.dating[learn,], ntree = 150, mtry= sqrt(ncol(speed.dating))*3,proximity=FALSE)
 rf.model2
+#13.34% OOB test error which is better than initial error.
 
 rf.pred2 <- predict(rf.model2, speed.dating[-learn,], type="class")
-
-ct <- table(Truth=speed.dating[-learn,]$match, Pred = rf.pred1)
+ct <- table(Truth=speed.dating[-learn,]$match, Pred = rf.pred2)
 #percentage by class
 prop.table(ct ,1)
 #total percentage corrent
 sum(diag(ct))/sum(ct)
+
+###SVM
+##SVM for continuousousous or ALL? 
+#svm.data <- speed.dating
+#target <- 112
+svm.data <- speed.dating.cont
+target <- 53
+
+set.seed(666)
+k <- 10
+folds <- sample(rep(1:k, length= nrow(svm.data)), nrow(svm.data), replace =FALSE)
+
+valid.error <- rep(0,k)
+
+train.svm.kCV <- function (which.kernel, myC, kCV=10)
+{
+  for (i in 1:kCV) 
+  {  
+    train <- svm.data[folds!=i,] # for building the model (training)
+    valid <- svm.data[folds==i,] # for prediction (validation)
+    
+    x_train <- train[,-target]
+    t_train <- train[,target]
+    
+    switch(which.kernel,
+           linear={model <- svm(x_train, t_train, type="C-classification", cost=myC, kernel="linear", scale = FALSE)},
+           poly.2={model <- svm(x_train, t_train, type="C-classification", cost=myC, kernel="polynomial", degree=2, coef0=1, scale = FALSE)},
+           poly.3={model <- svm(x_train, t_train, type="C-classification", cost=myC, kernel="polynomial", degree=3, coef0=1, scale = FALSE)},
+           RBF   ={model <- svm(x_train, t_train, type="C-classification", cost=myC, kernel="radial", scale = FALSE)},
+           stop("Enter one of 'linear', 'poly.2', 'poly.3', 'radial'"))
+    
+    x_valid <- valid[,-target]
+    pred <- predict(model,x_valid)
+    t_true <- valid[,target]
+    
+    # compute validation error for part 'i'
+    valid.error[i] <- sum(pred != t_true)/length(t_true)
+  }
+  # return average validation error
+  100*sum(valid.error)/length(valid.error)
+}
+C <- 1
+
+## Fit an SVM with linear kernel
+(VA.error.linear <- train.svm.kCV ("linear", myC=C)) #err:16.0838
+## Fit an SVM with quadratic kernel 
+(VA.error.poly.2 <- train.svm.kCV ("poly.2", myC=C)) #err:16.1625
+## Fit an SVM with cubic kernel
+(VA.error.poly.3 <- train.svm.kCV ("poly.3", myC=C)) #err:17.83858
+## Fit an SVM with radial kernel
+(VA.error.RBF <- train.svm.kCV ("RBF", myC=C)) #err:16.437
+
+###########havent done this, yet!########
+svm.tuning <- tune.svm( match~., data = svm.data, gamma = 2^(-1:1), cost = 2^(0:4))
+
+summary(svm.tuning)
+plot(svm.tuning)
+#########################################
+
+svm.model <- svm(svm.data[,-target], svm.data[,target], type="C-classification", cost=C, kernel="linear", scale = FALSE)
+svm.prediction <- predict(svm.model,svm.data[,-target])
+t_true <- svm.data[,target]
+
+table(svm.prediction,t_true)
+
+# compute testing error (in %)
+(sum(svm.prediction != t_true)/length(t_true))
