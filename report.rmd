@@ -10,6 +10,7 @@ output:
 ---
 
 ```{r include=F}
+set.seed(666)
 library(stringdist)
 library(mice)
 library(chemometrics)
@@ -20,6 +21,7 @@ library(shape)
 library(e1071)
 library(fpc)
 library(cclust)
+library(RColorBrewer)
 
 norm.score <- function(row) {
   m <- max(row, na.rm = T)
@@ -135,23 +137,19 @@ speed.dating[which(apply(speed.dating[,40:45], 1, sum) > 100),40:45] <- speed.da
 Finally, seeing that some of the types automatically assigned to the features by R when reading the file are wrong, we decided to change them. Also, we have discussed whether the score features should be considered factors but, due to one process run for feature extraction, numbers with decimals are obtained. Some come already with decimals from the file, too. We have decided that it would obviously cause innaccuracy, so scores will be considered as numeric values. We already have categorical values out of the box for scores anyway.
 
 ```{r include=F}
-speed.dating$has_null <- as.logical(speed.dating$has_null)
+speed.dating$has_null <- as.factor(speed.dating$has_null)
 speed.dating$wave <- as.factor(speed.dating$wave)
-speed.dating$samerace <- as.logical(speed.dating$samerace)
-speed.dating$decision <- as.logical(speed.dating$decision)
-speed.dating$decision_o <- as.logical(speed.dating$decision_o)
-speed.dating$match <- as.logical(speed.dating$match)
+speed.dating$samerace <- as.factor(speed.dating$samerace)
+speed.dating$decision <- as.factor(speed.dating$decision)
+speed.dating$decision_o <- as.factor(speed.dating$decision_o)
+speed.dating$match <- as.factor(speed.dating$match)
 ```
 
 ## Feature selection and extraction
 
-The block of features representing the preferences of the subjects regarding the five criteria (`_important` block for subject 1 and `pref_o_` block for subject 2) are scores out of 100. The rest of scores are out of 10. But, as explained in the introduction, these features work differently. If the out of 100 scores were regular scores, it would be better to multiply by 10 the out of 10 scores to avoid inaccuracies. In this case, we have decided to use the following formula to turn each feature in its proportional score between 0 and 10, based on the criteria with the highest score:
+The block of features representing the preferences of the subjects regarding the five criteria (`_important` block for subject 1 and `pref_o_` block for subject 2) are scores out of 100. The rest of scores are out of 10. But, as explained in the introduction, these features work differently. If the out of 100 scores were regular scores, it would be better to multiply by 10 the out of 10 scores to avoid inaccuracies. In this case, we have decided to use the formula below to turn each feature in its proportional score between 0 and 10, based on the criteria with the highest score, with a penalization in the denominator for those that did not distribute the 100 points.
 
-$$ score^{(i)}_{10} = \frac{10 \times score^{(i)}_{100}}{\max(score_{100}) \times \lambda} $$
-
-Where $\lambda$ represents a penalization that has been added to the denominator because some subjects did not distribute the available 100 points (as explained in the introduction) completely. $\lambda$ is calculated as shown below:
-
-$$ \lambda = 1 + \frac{100 - \sum_{i'} score^{(i')}_{100}}{100} $$
+$$ score^{(i)}_{10} = \frac{10 \times score^{(i)}_{100}}{\max(score_{100}) \times (1 + \frac{100 - \sum_{i'} score^{(i')}_{100}}{100})} $$
 
 ```{r include=F}
 for (i in 1:nrow(speed.dating)) {
@@ -195,7 +193,7 @@ speed.dating$has_null <- NULL
 
 After the all the preprocessing so far, only `r length(which(sapply(speed.dating, anyNA)))` features with NAs are left. These have been imputed using the MICE imputation method, using the five criteria parameters and the `_important` block as the only supplementary variables. Using the whole dataset slows down the whole process and makes it last up to 30 times more. Using only these features still gives realistic imputation, so we considered it appropriate.
 
-```{r include=F, cache=T}
+```{r include=F}
 mice.speed.dating <- mice(speed.dating[,c(which(sapply(speed.dating, anyNA)), 37:42, 47:52)], method = 'pmm', seed = 500)
 mice.speed.dating.complete <- complete(mice.speed.dating)
 speed.dating[, which(sapply(speed.dating, anyNA))] <- mice.speed.dating.complete[,1:length(which(sapply(speed.dating, anyNA)))]
@@ -208,8 +206,8 @@ The dataset has `r ncol(speed.dating)` left after the preprocessing. They are st
 ```{r multivar-outliers, echo=F, fig.cap="\\label{fig:multivar-outliers}Graphical representation of the Mahalanobis distances for each observation", fig.align="center", fig.height=3.5, fig.width=5}
 dating.outliers <- Moutlier(scale(speed.dating[,sapply(speed.dating, is.numeric)]), plot=F, quantile = 0.975)
 par(mfrow=c(1,2))
-plot(dating.outliers$md, main="Mahalanobis Distance", ylab="Distance", xlab="", col=ifelse(speed.dating$match, "orangered1", "royalblue1"), las=1, cex.axis=.75, pch=20, ylim=c(0, max(dating.outliers$rd)), xaxt="n", cex.main=.8, cex.lab = .7)
-plot(dating.outliers$rd, main="Robustified Mahalanobis", ylab="", xlab="", col=ifelse(speed.dating$match, "orangered1", "royalblue1"), las=1, cex.axis=.75, pch=20, ylim=c(0, max(dating.outliers$rd)), xaxt="n", cex.main=.7)
+plot(dating.outliers$md, main="Mahalanobis Distance", xlab="Distance", ylab="Index", col=ifelse(speed.dating$match == "1", "orangered1", "royalblue1"), las=1, cex.axis=.75, pch=20, ylim=c(0, max(dating.outliers$rd)), xaxt="n")
+plot(dating.outliers$rd, main="Robustified Mahalanobis", xlab="Distance", ylab="Index", col=ifelse(speed.dating$match == "1", "orangered1", "royalblue1"), las=1, cex.axis=.75, pch=20, ylim=c(0, max(dating.outliers$rd)), xaxt="n")
 cutoff <- sort(dating.outliers$rd, decreasing = T)[floor(nrow(speed.dating) * 0.025)]
 abline(h = cutoff, lty=2, col="red4", lwd=2.25)
 par(mfrow=c(1,1))
@@ -266,5 +264,40 @@ for (k in 2:6) {
 par(mfrow=c(1,1), mar=mar)
 ```
 
-# Articifial Neural Networks
+# Modelling
 
+The goal of this analysis is to find the learning algorithm or predictor that is able to build the best model for binary classification. The results of a predictive binary classification are usually represented in a confusion matrix, from which different quality measurements can be obtained. The ones we are most interested in are the recall and the selectivity, which measure the proportion of positively labelled correct predictions and negatively labelled correct predictions, respectively. The mean of these, called the balanced accuracy, can be used to obtain a more generalist metric.
+
+The holdout method will be used for **validation**. This consists on spliting the dataset into a training set and a test set. In our case, following the standard criterion, we built the training set with two thirds of the observations, chosen randomly. The remaining third comprises the test set. The training set has been used for the modelling, using five-fold and ten-fold cross validation (depending on the type of model and how time consuming the building process can be) to build many different models with the same parameters, and choosing the one with the most accuracy.
+
+```{r include=F}
+N <- nrow(speed.dating)
+
+learn <- sample(1:N, round(2 * N / 3))
+
+nlearn <- length(learn)
+ntest <- N - nlearn
+
+speed.dating.cont <- data.frame(scale(speed.dating[,sapply(speed.dating, is.numeric)], scale=F), match=speed.dating$match)
+speed.dating.cat <- speed.dating[,sapply(speed.dating, is.factor)]
+```
+
+Next, the results and conclusions for the four different predictors that we tried. These are the MLP articial neural network, random forests, \textcolor{red}{and so on and so forth}.
+
+## MLP Artificial Neural Networks
+
+```{r echo=F}
+nnet.train.k <- readRDS("nnet-train-k-results")
+plot(nnet.train.k$results[,3], col=0, xlim=c(3,16), las=1, xaxt="n")
+axis(1, at=3:16)
+grid()
+for (decay in seq(from=0.1, to=0.5, by=0.1)) {
+  points(nnet.train.k$results[nnet.train.k$results[,2] == decay, c(1,3)], col=brewer.pal(5, "Accent")[decay * 10], type="o", pch=20)
+}
+legend("bottomleft", legend=paste("decay =", seq(from=0.1, to=0.5, by=0.1)), col=brewer.pal(5, "Accent"), lty=1)
+```
+
+```{r echo=F}
+prediction <- predict(nnet.train.k$finalModel, newdata = speed.dating.cont[-learn,], type = "class")
+knitr::kable(as.matrix(confusionMatrix(table(prediction, speed.dating.cont$match[-learn]))))
+```

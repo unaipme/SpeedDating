@@ -9,6 +9,9 @@ library(e1071)
 library(fpc)
 library(cclust)
 library(randomForest)
+library(RColorBrewer)
+
+set.seed(666)
 
 speed.dating <- read.csv("speeddating.csv", na.strings = c("", "?"))
 
@@ -223,7 +226,7 @@ which(sapply(speed.dating, anyNA))
 
 # After deleting all useless features and instances, let's impute the missing values. First, we use MICE.
 # MICE performs mixed imputation (mixed variables types) and is not determinist.
-mice.speed.dating <- mice(speed.dating[,c(which(sapply(speed.dating, anyNA)), 37:42, 47:52)], method = 'pmm', seed = 500)
+mice.speed.dating <- mice(speed.dating[,c(which(sapply(speed.dating, anyNA)), 37:42, 47:52)], method = 'pmm')
 mice.speed.dating.complete <- complete(mice.speed.dating)
 mice.speed.dating.complete[apply(speed.dating, 1, anyNA),]
 # The imputed values seem right to us
@@ -242,19 +245,6 @@ abline(h = cutoff, lty=2, col="red4", lwd=2.25)
 par(mfrow=c(1,1))
 
 speed.dating <- speed.dating[-order(dating.outliers$rd, decreasing = T)[1:floor(nrow(speed.dating) * 0.025)],]
-
-#Classic.Mahalanobis <- table(factor(dating.outliers$md > dating.outliers$cutoff, labels=c("Not Outlier", "Outlier")))
-#Robust.Mahalanobis <- table(factor(dating.outliers$rd > dating.outliers$cutoff, labels=c("Not Outlier", "Outlier")))
-#c <- rbind(Classic.Mahalanobis, Robust.Mahalanobis) 
-
-#table(c) # TRUE if outlier
-#plot(dating.outliers$rd ~ dating.outliers$md, main="Robust against classical Mahalanobis distances", cex.main=0.8, xlab="Classic Mahalanobis", ylab="Robust Mahalanobis", cex.lab=0.8)
-#abline(h=dating.outliers$cutoff, col="red")
-#abline(v=dating.outliers$cutoff, col="red")
-
-# Remove multivariate Mahalanobis outliers
-#datingDataNum_mout <- datingDataNum[outliers$md < outliers$cutoff & outliers$rb < outliers$cutoff,] # See which instances are outliers
-#datingDataNum[outliers$md >= outliers$cutoff & outliers$rd >= outliers$cutoff,]
 
 ### EXPLORATORY DATA ANALYSIS (VISUALIZATION)
 
@@ -310,7 +300,7 @@ for (k in 2:11) {
   plot(pca.output$ind$coord, col=0, xaxt="n", yaxt="n", xlab="", ylab="", main=paste("k=", k, " (CH=", round(kmeans.ch, 2), ")", sep = ""))
   points(pca.output$ind$coord, col=rainbow(k)[kmeans.res$cluster])
 }
-par(mfrow=c(1,1), mar=mar)
+par(mfrow=c(1,1), mar=c(5.1, 4.1, 4.1, 2.1))
 
 # And, indeed, the more clusters we add, the less uniform they are and the less they score using the 
 # Calinksi-Harabaszz score. Still, due to the limitations of FactoMineR's PCA, it only calculates the 
@@ -330,10 +320,11 @@ for (k in 2:6) {
                            ellipse.type = "norm", geom = "point", stand = FALSE, main = "", legend=NULL)
 }
 speed.hclust.ch.scores
-# More of the same. Is this dataset "inclusterable"?
+# More of the same. Is this dataset "inclusterable"? Is it just one big cluster?
 
-### ARTIFICIAL NEURAL NETWORKS
+### MACHINE LEARNING oh boy here we go
 
+# Let's create the training and the test sets. The first one will be two thirds of the dataset and the latter one third.
 N <- nrow(speed.dating)
 
 learn <- sample(1:N, round(2 * N / 3))
@@ -341,47 +332,57 @@ learn <- sample(1:N, round(2 * N / 3))
 nlearn <- length(learn)
 ntest <- N - nlearn
 
+# Now let's also split the dataset into two subsets, one with the categorical variables and the other with the
+# continuous variables (plus the target variable)
 speed.dating.cat <- speed.dating[,sapply(speed.dating, is.factor)]
 speed.dating.cont <- data.frame(scale(speed.dating[,sapply(speed.dating, is.numeric)], scale=F), match=speed.dating$match)
 
+# These variables will be used for as the cross-validation configuration
+trc.5CV <- trainControl(method="cv", number = 5)
+trc.10CV <- trainControl(method="cv", number = 10)
 
-trControl <- trainControl(method="cv", number=10)
-multinom.10x10 <- train(match ~ ., data=speed.dating.cont, subset=learn, method='multinom', trControl=trControl, maxit=200)
+### ARTIFICIAL NEURAL NETWORKS
 
-prediction <- predict(multinom.10x10$finalModel, newdata=speed.dating[-learn,], type="class")
-#cbind(prediction, speed.dating$match[-learn])
-table(prediction, original=speed.dating$match[-learn])
+# This takes looooong, you can otherwise just run the "readRDS" function if the training has been done before
+#nnet.train.k <- train(match ~ ., data=speed.dating.cont, subset = learn, method="nnet", trControl=trc.5CV, maxit=400,
+#                      tuneGrid = expand.grid(size = 3:16, decay = seq(from=0.1, to=0.5, by=0.1)))
+##
+nnet.train.k <- readRDS("nnet-train-k-results")
 
-#model.nnet0 <- multinom(match ~ ., data=speed.dating.cat, subset=learn, maxit=200)
+# Let us save it for the report...
+saveRDS(nnet.train.k, file="nnet-train-k-results")
 
-#model.nnet0 <- multinom(match ~ d_d_age + samerace + d_pref_o_attractive + d_pref_o_sincere + d_pref_o_intelligence +
- #                         d_pref_o_funny + d_pref_o_ambitious + d_pref_o_shared_interests, data=speed.dating, subset=learn, maxit=200)
+# This plot will show us the evolution of the accuracy of the models along the x-axis that represents the size of the
+# hidden layer, depending on the decay rate.
+plot(nnet.train.k$results[,3], col=0, xlim=c(3,16), las=1, xaxt="n")
+axis(1, at=3:16)
+grid()
+for (decay in seq(from=0.1, to=0.5, by=0.1)) {
+  points(nnet.train.k$results[nnet.train.k$results[,2] == decay, c(1,3)], col=brewer.pal(5, "Accent")[decay * 10], type="o", pch=20)
+}
+legend("bottomleft", legend=paste("decay =", seq(from=0.1, to=0.5, by=0.1)), col=brewer.pal(5, "Accent"), lty=1)
+# The best model turns out to be the one with 4 neurons in the hidden layer and a decay of 0.2
 
-prediction <- predict(model.nnet0, newdata=speed.dating[-learn,], type="class")
-cbind(prediction, speed.dating$match[-learn])
-table(prediction, speed.dating$match[-learn])
-
-#model.nnet0 <- multinom(match ~ , data=speed.dating, subset=learn, maxit=200)
+# And, still, the best model has a pretty low balanced accuracy. Look at that NPV, it's below 50%
+prediction <- predict(nnet.train.k$finalModel, newdata = speed.dating.cont[-learn,], type = "class")
+confusionMatrix(table(prediction, speed.dating.cont$match[-learn]))
 
 ### BAYES
 
-##Two ways: i)ignore continuououso variables ii)handle them.
-##We decided to ignore them.
-
 bayes.model <- naiveBayes(match ~ ., data=speed.dating.cat[learn,])
 
-#the apparent(training) error
-bayes.training <- predict(bayes.model, newdata=speed.dating.cat[learn,-115]) #115th col is the match
-confusionMatrix(bayes.prediction, speed.dating.cat$match[-learn])
+# The empirical (training) error
+bayes.training <- predict(bayes.model, newdata=speed.dating.cat[learn,-60]) #115th col is the match
+confusionMatrix(bayes.training, speed.dating.cat$match[learn])
 
-#test(prediction) error
-bayes.prediction <- predict(bayes.model, newdata=speed.dating.cat[-learn,-115])
+# Test (prediction) error
+bayes.prediction <- predict(bayes.model, newdata=speed.dating.cat[-learn,-60])
 confusionMatrix(bayes.prediction, speed.dating.cat$match[-learn])
 
 ### KNN 
 #the categorical data -- not sure about this, it works without any errors but should we do knn for categorical?
 ##Sampling
-set.seed(333)
+
 cat.index <- createDataPartition( y =speed.dating.cat$match, p= 0.75, list= FALSE)
 cat.training <- speed.dating.cat[cat.index,]
 cat.test <- speed.dating.cat[-cat.index,]
@@ -408,7 +409,6 @@ mean(catPredict == cat.test$match)
 
 #the continuousususosus data -- works properly
 ##Sampling
-set.seed(333)
 cont.index <- createDataPartition( y =speed.dating.cont$match, p= 0.75, list= FALSE)
 cont.training <- speed.dating.cont[cont.index,]
 cont.test <- speed.dating.cont[-cont.index,]
@@ -434,7 +434,6 @@ mean(contPredict == cont.test$match)
 
 ###Random Forest
 
-set.seed(666)
 rf.model1 <- randomForest( match ~ ., data = speed.dating[learn,], ntree = 100, proximity=FALSE)
 rf.model1
 
