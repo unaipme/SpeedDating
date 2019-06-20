@@ -343,10 +343,13 @@ trc.10CV <- trainControl(method="cv", number = 10)
 
 ### ARTIFICIAL NEURAL NETWORKS
 
-# This takes looooong, you can otherwise just run the "readRDS" function if the training has been done before
-#nnet.train.k <- train(match ~ ., data=speed.dating.cont, subset = learn, method="nnet", trControl=trc.5CV, maxit=400,
-#                      tuneGrid = expand.grid(size = 3:16, decay = seq(from=0.1, to=0.5, by=0.1)))
-##
+# This takes looooong, you can otherwise just run the "readRDS" function if the training has been done before.
+# It is commented so that it is not run unintentionally.
+
+#########################################################################################################################
+# nnet.train.k <- train(match ~ ., data=speed.dating.cont, subset = learn, method="nnet", trControl=trc.5CV, maxit=400, #
+#                      tuneGrid = expand.grid(size = 3:16, decay = seq(from=0.1, to=0.5, by=0.1)))                      #
+#########################################################################################################################
 nnet.train.k <- readRDS("nnet-train-k-results")
 
 # Let us save it for the report...
@@ -368,18 +371,17 @@ prediction <- predict(nnet.train.k$finalModel, newdata = speed.dating.cont[-lear
 confusionMatrix(table(prediction, speed.dating.cont$match[-learn]))
 
 ### BAYES
+##Cont. vars are discarded, only categorical ones are investigated with bayes
 
-##Two ways: i)ignore continuououso variables ii)handle them.
-##We decided to ignore them.
+#default value for laplace = 0, changing that to 1 didnt have any impact on the error rates.
+bayes.model <- naiveBayes(match ~ ., data=speed.dating.cat[learn,], laplace = 0)
 
-bayes.model <- naiveBayes(match ~ ., data=speed.dating.cat[learn,])
+#the apparent(training) error 0.7878
+bayes.training <- predict(bayes.model, newdata=speed.dating.cat[learn,-60])
+confusionMatrix(bayes.training, speed.dating.cat$match[learn])
 
-#the apparent(training) error
-bayes.training <- predict(bayes.model, newdata=speed.dating.cat[-learn,]) 
-confusionMatrix(bayes.prediction, speed.dating.cat$match[-learn])
-
-#test(prediction) error
-bayes.prediction <- predict(bayes.model, newdata=speed.dating.cat[-learn,])
+#test(prediction) error 0.7972
+bayes.prediction <- predict(bayes.model, newdata=speed.dating.cat[-learn,-60])
 confusionMatrix(bayes.prediction, speed.dating.cat$match[-learn])
 
 ### KNN 
@@ -435,34 +437,120 @@ contPredict <- predict(contFit, newdata = cont.test)
 confusionMatrix(contPredict, cont.test$match)
 mean(contPredict == cont.test$match)
 
-###Random Forest
+### RANDOM FORESTS
 
-set.seed(666)
-rf.model1 <- randomForest( match ~ ., data = speed.dating[learn,], ntree = 100, proximity=FALSE)
-rf.model1
+# We are going to build two random forests, one with the continuous features and the other with the categorical ones
+rf.model1.cont <- randomForest(match ~ ., data = speed.dating.cont[learn,], ntree = 100, proximity=FALSE)
+rf.model1.cat <- randomForest(match ~ ., data = speed.dating.cat[learn,], ntree = 100, proximity=FALSE)
 
-#14.83% OOB test error
+# These are the confusion matrices for each of the forests. As could be expected, the one with the continuous variables
+# is better, but only *slightly*.
+rf.model1.cont$confusion
+rf.model1.cat$confusion
 
-rf.pred1 <- predict(rf.model1, speed.dating[-learn,], type="class")
+# Let's see how the prediction works.
+rf.pred1.cont <- predict(rf.model1.cont, speed.dating.cont[-learn,], type="class")
+rf.pred1.cat <- predict(rf.model1.cat, speed.dating.cat[-learn,], type="class")
 
-ct <- table(Truth=speed.dating[-learn,]$match, Pred = rf.pred1)
-#percentage by class
-prop.table(ct ,1)
-#total percentage corrent
-sum(diag(ct))/sum(ct)
+conf.matr.cont <- table(rf.pred1.cont, speed.dating.cont$match[-learn])
+conf.matr.cat <- table(rf.pred1.cat, speed.dating.cat$match[-learn])
 
-#try to decrease the oob error with trying different vals for mtry and ntree
-#mtry = number of variables randomly sampled as candidates at each split, default is sqrt(ncol(speed.dating))
-rf.model2 <- randomForest( match ~ ., data = speed.dating[learn,], ntree = 150, mtry= sqrt(ncol(speed.dating))*3,proximity=FALSE)
-rf.model2
-#13.34% OOB test error which is better than initial error.
+# And these are the percentages of well guessed predictions for each of those.
+sum(diag(conf.matr.cont))/sum(conf.matr.cont)
+sum(diag(conf.matr.cat))/sum(conf.matr.cat)
 
-rf.pred2 <- predict(rf.model2, speed.dating[-learn,], type="class")
-ct <- table(Truth=speed.dating[-learn,]$match, Pred = rf.pred2)
-#percentage by class
-prop.table(ct ,1)
-#total percentage corrent
-sum(diag(ct))/sum(ct)
+# Now, we are going to try parametrizing and cross-validating the previous process, seeing that
+# using the continuous variables gives better results
+
+best.rf.model <- NA
+accuracies <- rep(NA, (225 - 75) / 25)
+
+# This takes long. Not as long as the ANN, but still a bit long. Let's load the pre-saved file.
+
+###############################################################################################################################
+# mtry <- floor(sqrt(ncol(speed.dating.cat)) * 3)                                                                             #
+# for (ntree in seq(from = 75, to = 225, by = 25)) {                                                                          #
+#   random.tree <- train(match ~ ., data = speed.dating.cat, subset = learn, method="rf", proximity = F, trControl=trc.10CV,                 #
+#                        tuneGrid = expand.grid(mtry = mtry), ntree = ntree)                                                  #
+#   accuracies[((ntree - 75) / 25) + 1] <- random.tree$results$Accuracy                                                       #
+#   if (!is.na(best.rf.model)) {                                                                                              #
+#     if (random.tree$results$Accuracy > best.rf.model$results$Accuracy) {                                                    #
+#       best.rf.model <- random.tree                                                                                          #
+#     }                                                                                                                       #
+#   } else {                                                                                                                  #
+#     best.rf.model <- random.tree                                                                                            #
+#   }                                                                                                                         #
+# }                                                                                                                           #
+###############################################################################################################################
+
+best.rf.model <- readRDS("best-rf-model")
+accuracies <- readRDS("rf-accuracies")
+
+# Save the results
+saveRDS(best.rf.model, "best-rf-model")
+saveRDS(accuracies, "rf-accuracies")
+
+# And now, in the plot we can see that 175 is the amount of trees the performs the best, but by little difference
+plot(accuracies, xaxt="n", type="o", pch=20, ylim=c(.82,.9), col="royalblue1", ylab="Accuracy", xlab="ntree", las=1)
+grid()
+axis(1, at=(seq(from = 75, to = 225, by = 25) - 75) / 25 + 1, labels=seq(from = 75, to = 225, by = 25))
+points(x = which(accuracies == best.rf.model$results$Accuracy), y = best.rf.model$results$Accuracy, col="orangered1")
+
+best.rf.model$finalModel
+
+# The barplot below will show the most important features of the forest.
+rf.imp.barplot <- barplot(sort(best.rf.model$finalModel$importance, decreasing = T)[1:10], col=rev(brewer.pal(10, "RdYlGn")))
+text(rf.imp.barplot, y = 1, srt=90, labels=names(speed.dating.cont)[order(best.rf.model$finalModel$importance, decreasing = T)][1:10],
+     xpd=T, adj = 0)
+# And... who would have guessed? "like" is the most important feature (but a pretty significative gap)
+# Looking back at the meaning of "like", it means whether the subject liked (and, we mean, **just liked**) their partner. And:
+nrow(speed.dating[speed.dating$like == 1,]) - nrow(speed.dating[speed.dating$like == 1 & speed.dating$match == 0,])
+# Only once in the dataset happens the case in which a subject likes the partner but they do not match.
+# Let's try building another forest but without the "like" feature
+
+
+best.rf.model.2 <- NA
+accuracies.2 <- rep(NA, (225 - 75) / 25)
+#####################################################################################################################################
+# mtry <- floor(sqrt(ncol(speed.dating.cat) - 1) * 3)                                                                               #
+# for (ntree in seq(from = 75, to = 225, by = 25)) {                                                                                #
+#   random.tree <- train(match ~ ., data = speed.dating.cont[,-51], subset = learn, method="rf", proximity = F, trControl=trc.10CV, #
+#                        tuneGrid = expand.grid(mtry = mtry), ntree = ntree)                                                        #
+#   accuracies.2[((ntree - 75) / 25) + 1] <- random.tree$results$Accuracy                                                           #
+#   if (!is.na(best.rf.model.2)) {                                                                                                  #
+#     if (random.tree$results$Accuracy > best.rf.model.2$results$Accuracy) {                                                        #
+#       best.rf.model.2 <- random.tree                                                                                              #
+#     }                                                                                                                             #
+#   } else {                                                                                                                        #
+#     best.rf.model.2 <- random.tree                                                                                                #
+#   }                                                                                                                               #
+# }                                                                                                                                 #
+#####################################################################################################################################
+
+best.rf.model.2 <- readRDS("best-rf-model2")
+accuracies.2 <- readRDS("rf-accuracies2")
+
+# Save the results again
+saveRDS(best.rf.model.2, "best-rf-model2")
+saveRDS(accuracies.2, "rf-accuracies2")
+
+plot(accuracies.2, xaxt="n", type="o", pch=20, ylim=c(.82,.9), col="royalblue1", ylab="Accuracy", xlab="ntree", las=1)
+points(accuracies, type="o", pch=20)
+grid()
+axis(1, at=(seq(from = 75, to = 225, by = 25) - 75) / 25 + 1, labels=seq(from = 75, to = 225, by = 25))
+points(x = which(accuracies == best.rf.model$results$Accuracy), y = best.rf.model$results$Accuracy, col="orangered1")
+points(x = which(accuracies.2 == best.rf.model.2$results$Accuracy), y = best.rf.model.2$results$Accuracy, col="orangered1")
+
+# Now, the interests have changed. And it's obvious that the most relevant features are related to the subjects being
+# funny and attractive. Who would have thought? This dataset certainly is full of surprises.
+rf.imp.barplot.2 <- barplot(sort(best.rf.model.2$finalModel$importance, decreasing = T)[1:10], col=rev(brewer.pal(10, "RdYlGn")))
+text(rf.imp.barplot.2, y = 1, srt=90, labels=names(speed.dating.cont[,-51])[order(best.rf.model.2$finalModel$importance, decreasing = T)][1:10],
+     xpd=T, adj = 0)
+
+# And so, the final model, built without the "liked" feature, has the following confusion matrix:
+best.rf.model.2$finalModel$confusion
+# Which is slightly better at classifying true positives.
+best.rf.model$finalModel$confusion
 
 ###SVM
 ##SVM for continuousousous or ALL? 

@@ -302,18 +302,42 @@ Next, the results and conclusions for the four different predictors that we trie
 
 ## MLP Artificial Neural Networks
 
+The MultiLayer Perceptron neural network has been tried with several different decays and sizes, and it has been built only with the continuous variables of the dataset. However, we have manually tuned the maximum amount of iterations allowed for back-propagation by visually analyzing the text output. First, with `maxit` set to 150, it was obvious that when the maximum was reached the weights still had room for improvement. We have settled in with 400. Even though the cost still was getting reduced iteration by iteration, the difference stopped being so significant after around 300 iterations.
+
 ```{r echo=F}
 nnet.train.k <- readRDS("nnet-train-k-results")
-plot(nnet.train.k$results[,3], col=0, xlim=c(3,16), las=1, xaxt="n")
-axis(1, at=3:16)
+prediction <- predict(nnet.train.k$finalModel, newdata = speed.dating.cont[-learn,], type = "class")
+knitr::kable(as.matrix(confusionMatrix(table(prediction, speed.dating.cont$match[-learn]))), caption = "\\label{tab:ann-confusion-matrix}Confusion matrix for MLP", format="latex", valign="H", booktabs=T)
+```
+
+As for the decay and sizes of the hidden layer, we have tried all possible combinatios of the ranges \{`r paste(seq(from=0.1, to=0.5, by=0.1), collapse = ",")`\} for the decay and [3,16] for the size. The result is the one shown in figure \ref{fig:ann-accuracy-plot}: The configuration that obtains the best accuracy, by a small gap, is a 4 neuron-sized hidden layer with a decay of 0.2. If anything, it is clear that adding more neurons to the hidden layer makes the end result worse, at least in this case. Also, size 3 is the best option, no matter the decay. Finally, for the chosen model, the confusion matrix can be seen on table \ref{tab:ann-confusion-matrix}.
+
+<center>
+```{r echo=F, fig.cap="\\label{fig:ann-accuracy-plot}Plot of the accuracy over the different configurations", fig.pos="th", out.extra="", fig.height=4}
+plot(nnet.train.k$results[,3], col=0, xlim=c(3,16), las=1, xaxt="n", xlab="", ylab="Accuracy", cex.axis=.75)
+axis(1, at=3:16, cex.axis=.75)
 grid()
 for (decay in seq(from=0.1, to=0.5, by=0.1)) {
   points(nnet.train.k$results[nnet.train.k$results[,2] == decay, c(1,3)], col=brewer.pal(5, "Accent")[decay * 10], type="o", pch=20)
 }
-legend("bottomleft", legend=paste("decay =", seq(from=0.1, to=0.5, by=0.1)), col=brewer.pal(5, "Accent"), lty=1)
+legend("bottomleft", legend=paste("decay =", seq(from=0.1, to=0.5, by=0.1)), col=brewer.pal(5, "Accent"), lty=1, cex=.75)
 ```
+</center>
 
-```{r echo=F}
-prediction <- predict(nnet.train.k$finalModel, newdata = speed.dating.cont[-learn,], type = "class")
-knitr::kable(as.matrix(confusionMatrix(table(prediction, speed.dating.cont$match[-learn]))))
+## Random forests
+
+To build the random forest models, the two types of features (categorical ones from one side and continuous ones from the other) have been fed to it separately. The forest built with the continuous features gave slightly better preliminary results, so we have worked with it. To find the best possible model, we have parametrized the treen spawn (`ntree`), leaving the variable sample size static to \(\lfloor\sqrt{D} \times 3\rfloor =\) `r floor(sqrt(ncol(speed.dating.cat)) * 3)` (\(D\) being the amount of dimensions), and built it with 10-fold cross-validation. The accuracy did not vary too much among these models, but the one with the highest accuracy usually ends up using 175 trees.
+
+When plotting the importance of the each variables, we found out that the feature with the highest importance (by a significant gap) was `like`, which expresses whether the subject liked their date. In the dataset, there is only one observation in which the subject liked the date but there was no match. So, we decided to try to build another random forest without the bias of this feature, and the result can be seen in figure \ref{fig:rf-var-importance}.
+
+<center>
+```{r rf-var-importance, echo=F, out.extra="", fig.cap="Barplot of the importance of variables in the forest", fig.align="center", fig.pos="!b", fig.height=4, fig.width=5.25}
+best.rf.model <- readRDS("best-rf-model")
+accuracies <- readRDS("rf-accuracies")
+best.rf.model.2 <- readRDS("best-rf-model2")
+accuracies.2 <- readRDS("rf-accuracies2")
+
+rf.imp.barplot.2 <- barplot(sort(best.rf.model.2$finalModel$importance, decreasing = T)[1:10], col=rev(brewer.pal(10, "RdYlGn")))
+text(rf.imp.barplot.2, y = 2, srt=90, labels=names(speed.dating.cont[,-51])[order(best.rf.model.2$finalModel$importance, decreasing = T)][1:10], xpd=T, adj = 0, cex=.9)
 ```
+</center>
