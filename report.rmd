@@ -8,7 +8,8 @@ header-includes:
   - \usepackage{booktabs}
   - \renewcommand{\baselinestretch}{1.15}
 output:
-  pdf_document: default
+  pdf_document:
+    keep_tex: no
 ---
 
 ```{r include=F}
@@ -24,6 +25,7 @@ library(e1071)
 library(fpc)
 library(cclust)
 library(RColorBrewer)
+library(randomForest)
 
 norm.score <- function(row) {
   m <- max(row, na.rm = T)
@@ -205,7 +207,7 @@ speed.dating[, which(sapply(speed.dating, anyNA))] <- mice.speed.dating.complete
 
 The dataset has `r ncol(speed.dating)` left after the preprocessing. They are still plenty, so trying to find univariate outliers is not only annoying, but also useless. For the multivariate outlier detection, the Mahalanobis distance has been used. Figure \ref{fig:multivar-outliers} shows a graphical representation of the distances of each observation, where the red dots represent the observations with a match, and the blue ones observations without a match. On plain sight, there does not seem to be any correlation between the outcome and the distance (or the _outlierness_, we could say). If anything, we can state that the few that stand out the most are non-matches. The 2.5% of the observations with the highest Mahalanobis distance, shown in the figure \ref{fig:multivar-outliers} above the line, will be considered outliers and removed.
 
-```{r multivar-outliers, echo=F, fig.cap="\\label{fig:multivar-outliers}Graphical representation of the Mahalanobis distances for each observation", fig.align="center", fig.height=3.5, fig.width=5}
+```{r multivar-outliers, echo=F, fig.cap="Graphical representation of the Mahalanobis distances for each observation", fig.align="center", fig.height=3.5, fig.width=5}
 dating.outliers <- Moutlier(scale(speed.dating[,sapply(speed.dating, is.numeric)]), plot=F, quantile = 0.975)
 par(mfrow=c(1,2))
 plot(dating.outliers$md, main="Mahalanobis Distance", ylab="Distance", xlab="", col=ifelse(speed.dating$match == "1", "orangered1", "royalblue1"), las=1, cex.axis=.75, pch=20, ylim=c(0, max(dating.outliers$rd)), xaxt="n", cex.main=.8)
@@ -228,7 +230,7 @@ pca.output <- PCA(speed.dating.pca, quali.sup = c(53), graph = F)
 pca.best.repr.vars <- order(sqrt(pca.output$var$coord[,1]^2 + pca.output$var$coord[,2] ^ 2), decreasing = T)[1:10]
 ```
 
-```{r echo=F, fig.cap="\\label{fig:pca-ind-repr}Representation of individuals in first factorial plane", fig.height=3.25, fig.width=4, fig.pos="!b", out.extra="", fig.align="center"}
+```{r pca-ind-repr, echo=F, fig.cap="Representation of individuals in first factorial plane", fig.height=3.25, fig.width=4, fig.pos="!b", out.extra="", fig.align="center"}
 plot(pca.output$ind$coord, col=0, las=1, cex.axis=.7, cex.lab=.8, xlab="", ylab="")
 grid()
 points(pca.output$ind$coord, col="royalblue1", pch=20)
@@ -243,7 +245,7 @@ text(pca.output$quali.sup$coord[,1], pca.output$quali.sup$coord[,2] - 1.2, col="
 
 PCA allows us to see a representation of the dataset in two dimension of the data. With this, we will perform a few clustering methods and see if we can extract something useful out of it. PCA can only be used with numeric explanatory variables, so the variable `match` was added as qualitative suplementary variable. This means a total of `r length(which(sapply(speed.dating, is.numeric))) + 1` variables. Figure \ref{fig:pca-var-repr} shows the representation in the first factorial plane of _only_ the 10 variables with the most representation and, still, they are not really well represented, probably due to the high dimensionality of the data. In figure \ref{fig:pca-ind-repr} the representation of the individuals and the categories of the `match` supplementary variable can be seen. None of those seems to be too tied to any of the dimensions.
 
-```{r echo=F, fig.height=3.75, fig.cap="\\label{fig:pca-var-repr}Variable representation in the first factorial plane", fig.pos="H", out.extra="", fig.align="center"}
+```{r pca-var-repr, echo=F, fig.height=3.75, fig.cap="Variable representation in the first factorial plane", fig.pos="H", out.extra="", fig.align="center"}
 plot(pca.output$var$coord, col=0, xlim=c(-2.5,1.5), ylim=c(-.8,.8), las=1, cex.axis=.7, cex.lab=.8, xlab="", ylab="")
 abline(h=0, col="gray")
 abline(v=0, col="gray")
@@ -256,9 +258,9 @@ The data cloud shown in figure \ref{fig:pca-ind-repr} looks like no more than a 
 
 # Modelling
 
-The goal of this analysis is to find the learning algorithm or predictor that is able to build the best model for binary classification. The results of a predictive binary classification are usually represented in a confusion matrix, from which different quality measurements can be obtained. The ones we are most interested in are the recall and the selectivity, which measure the proportion of positively labelled correct predictions and negatively labelled correct predictions, respectively. The mean of these, called the balanced accuracy, can be used to obtain a more generalist metric.
+The goal of this analysis is to find the learning algorithm or predictor that is able to build the best model for binary classification. The results of a predictive binary classification are usually represented in a confusion matrix, from which different quality measurements can be obtained. The ones we are most interested in are the positive and the negative predictive values (PPV and NPV), which measure the proportion of positively labelled correct predictions and negatively labelled correct predictions, respectively. The mean of these, called the balanced accuracy, can be used to obtain a more generalist metric.
 
-```{r echo=F, fig.height=2, fig.cap="\\label{fig:kmeans}Result of k-means with k = [2,6]", fig.pos="!t", out.extra=""}
+```{r kmeans, echo=F, fig.height=2, fig.cap="Result of k-means with k = [2,6]", fig.pos="!t", out.extra=""}
 mar <- par("mar")
 par(mfrow=c(1,5), mar=c(1,0,1,0))
 for (k in 2:6) {
@@ -290,15 +292,16 @@ Next, the results and conclusions for the four different predictors that we trie
 
 The MultiLayer Perceptron neural network has been tried with several different decays and sizes, and it has been built only with the continuous variables of the dataset. However, we have manually tuned the maximum amount of iterations allowed for back-propagation by visually analyzing the text output. First, with `maxit` set to 150, it was obvious that when the maximum was reached the weights still had room for improvement. We have settled in with 400. Even though the cost still was getting reduced iteration by iteration, the difference stopped being so significant after around 300 iterations.
 
-```{r echo=F}
+```{r ann-confusion-matrix, echo=F}
 nnet.train.k <- readRDS("nnet-train-k-results")
 prediction <- predict(nnet.train.k$finalModel, newdata = speed.dating.cont[-learn,], type = "class")
-knitr::kable(as.matrix(confusionMatrix(table(prediction, speed.dating.cont$match[-learn]))), caption = "\\label{tab:ann-confusion-matrix}Confusion matrix for MLP", format="latex", valign="H", booktabs=T)
+conf.matrix.ann <- confusionMatrix(table(prediction, speed.dating.cont$match[-learn]))
+knitr::kable(as.matrix(conf.matrix.ann), caption = "Confusion matrix for MLP", format="latex", valign="H", booktabs=T)
 ```
 
-As for the decay and sizes of the hidden layer, we have tried all possible combinatios of the ranges \{`r paste(seq(from=0.1, to=0.5, by=0.1), collapse = ",")`\} for the decay and [3,16] for the size. The result is the one shown in figure \ref{fig:ann-accuracy-plot}: The configuration that obtains the best accuracy, by a small gap, is a 4 neuron-sized hidden layer with a decay of 0.2. If anything, it is clear that adding more neurons to the hidden layer makes the end result worse, at least in this case. Also, size 3 is the best option, no matter the decay. Finally, for the chosen model, the confusion matrix can be seen on table \ref{tab:ann-confusion-matrix}.
+As for the decay and sizes of the hidden layer, we have tried all possible combinatios of the ranges \{`r paste(seq(from=0.1, to=0.5, by=0.1), collapse = ",")`\} for the decay and [3,16] for the size. The result is the one shown in figure \ref{fig:ann-accuracy-plot}: The configuration that obtains the best accuracy, by a small gap, is a 4 neuron-sized hidden layer with a decay of 0.2. If anything, it is clear that adding more neurons to the hidden layer makes the end result worse, at least in this case. Also, size 4 is the best option, no matter the decay. Finally, for the chosen model, the confusion matrix can be seen on table \ref{tab:ann-confusion-matrix}. The PPV, `r round(conf.matrix.ann$byClass[3], 3)`, is pretty good, but the NPV is `r round(conf.matrix.ann$byClass[4], 3)` is too low, closing in to only 50%.
 
-```{r echo=F, fig.cap="\\label{fig:ann-accuracy-plot}Plot of the accuracy over the different configurations", fig.pos="th", out.extra="", fig.height=4}
+```{r ann-accuracy-plot, echo=F, fig.cap="Plot of the accuracy over the different configurations", fig.pos="th", out.extra="", fig.height=4}
 plot(nnet.train.k$results[,3], col=0, xlim=c(3,16), las=1, xaxt="n", xlab="", ylab="Accuracy", cex.axis=.75)
 axis(1, at=3:16, cex.axis=.75)
 grid()
@@ -312,14 +315,38 @@ legend("bottomleft", legend=paste("decay =", seq(from=0.1, to=0.5, by=0.1)), col
 
 To build the random forest models, the two types of features (categorical ones from one side and continuous ones from the other) have been fed to it separately. The forest built with the continuous features gave slightly better preliminary results, so we have worked with it. To find the best possible model, we have parametrized the treen spawn (`ntree`), leaving the variable sample size static to \(\lfloor\sqrt{D} \times 3\rfloor =\) `r floor(sqrt(ncol(speed.dating.cat)) * 3)` (\(D\) being the amount of dimensions), and built it with 10-fold cross-validation. The accuracy did not vary too much among these models, but the one with the highest accuracy usually ends up using 175 trees.
 
-When plotting the importance of the each variables, we found out that the feature with the highest importance (by a significant gap) was `like`, which expresses whether the subject liked their date. In the dataset, there is only one observation in which the subject liked the date but there was no match. So, we decided to try to build another random forest without the bias of this feature, and the result can be seen in figure \ref{fig:rf-var-importance}.
-
-```{r rf-var-importance, echo=F, out.extra="", fig.cap="Barplot of the importance of variables in the forest", fig.align="center", fig.pos="!b", fig.height=4, fig.width=5.25}
+```{r rf-var-importance, echo=F, out.extra="", fig.cap="Barplot of the importance of variables in the forest", fig.align="center", fig.pos="H", fig.height=4, fig.width=5.25}
 best.rf.model <- readRDS("best-rf-model")
 accuracies <- readRDS("rf-accuracies")
 best.rf.model.2 <- readRDS("best-rf-model2")
 accuracies.2 <- readRDS("rf-accuracies2")
 
 rf.imp.barplot.2 <- barplot(sort(best.rf.model.2$finalModel$importance, decreasing = T)[1:10], col=rev(brewer.pal(10, "RdYlGn")))
-text(rf.imp.barplot.2, y = 2, srt=90, labels=names(speed.dating.cont[,-51])[order(best.rf.model.2$finalModel$importance, decreasing = T)][1:10], xpd=T, adj = 0, cex=.9)
+text(rf.imp.barplot.2, y = 2, srt=90, labels=names(speed.dating.cont[,-51])[order(best.rf.model.2$finalModel$importance, decreasing = T)][1:10], xpd=F, adj = 0, cex=.9)
+```
+
+```{r include=F}
+prediction <- predict(best.rf.model.2$finalModel, speed.dating.cont[-learn,-51], type="class")
+conf.matrix.rf <- confusionMatrix(table(prediction, speed.dating.cont$match[-learn]))
+```
+
+When plotting the importance of the each variables, we found out that the feature with the highest importance (by a significant gap) was `like`, which expresses whether the subject liked their date. In the dataset, there is only one observation in which the subject liked the date but there was no match. So, we decided to try to build another random forest without the bias of this feature, and the result can be seen in figure \ref{fig:rf-var-importance}. We think no one will be shocked by how attractiveness and shared interests play such an important role in deciding the outcome of a date. But the most important characteristic seems to be whether the partner is funny or not. Now, that is more of a surprise. Table \ref{tab:confusion-matrix-rf} shows the confusion matrix obtained by the prediction, which scores a PPV of `r round(conf.matrix.rf$byClass[3], 3)` and a NPV of `r round(conf.matrix.rf$byClass[4], 3)`, which tells us obviously that this is a very reliable model, the most so far.
+
+```{r confusion-matrix-rf, echo=F}
+prediction <- predict(best.rf.model.2$finalModel, speed.dating.cont[-learn,-51], type="class")
+knitr::kable(table(prediction, speed.dating.cont$match[-learn]), format="latex", caption = "Confusion matrix for the random forest", booktabs=T)
+```
+
+## Logistic regression
+
+```{r include=F}
+glm.model <- glm(match ~ ., data = speed.dating.cont[learn,], family = binomial(link=logit))
+prediction <- predict(glm.model, newdata = speed.dating.cont[-learn,], type="response")
+conf.matrix.glm <- confusionMatrix(table(prediction > 0.5, speed.dating.cont$match[-learn] == 1))
+```
+
+This type of generalized linear model is a typical choice for binary classification. However, cross-validation can not be used because it is deterministic, and would not give out different models after each run, so we have proceeded the regular way. With the logistic regression, we have calculated the probability of an instance to have 1 in the `match` target variable. The model built using all the continuous features results in the confusion matrix shown in table \ref{tab:conf-matrix-glm}, and the results are reasonably good. The accuracy (`r round(conf.matrix.glm$overall[1], 3)`) and PPV (`r round(conf.matrix.glm$byClass[3], 3)`) are significantly good for such a simple model and, compared to the other models so far, the NPV (`r round(conf.matrix.glm$byClass[4], 3)`) is also slightly better than the MLP.
+
+```{r conf-matrix-glm, echo=F}
+knitr::kable(as.matrix(conf.matrix.glm), booktabs=T, format="latex", caption="Confusion matrix for the logistic regression", valign="H")
 ```

@@ -548,6 +548,14 @@ best.rf.model.2$finalModel$confusion
 # Which is slightly better at classifying true positives.
 best.rf.model$finalModel$confusion
 
+# Validation:
+prediction <- predict(best.rf.model.2$finalModel, speed.dating.cont[-learn,-51], type="class")
+table(prediction, speed.dating.cont$match[-learn])
+confusionMatrix(cm.table)
+# And the PPV and NPV are actually really good, both close to 95%. This model is GOOD!!
+# It has score way above in both specificity and (therefore) in NPV, which is the biggest
+# issue other models are facing. Might this be the model we are looking for?
+
 ###SVM
 
 ##SVM for continuousousous or ALL? 
@@ -615,3 +623,12 @@ table(svm.prediction,t_true)
 
 # compute testing error (in %)
 (sum(svm.prediction != t_true)/length(t_true))
+
+### LOGISTIC REGRESSION
+
+# Just the regular way of running the logistic regression, nothing to explain here, except for
+# that we are naturally using just the continuous variables
+glm.model <- glm(match ~ ., data = speed.dating.cont[learn,], family = binomial(link=logit))
+prediction <- predict(glm.model, newdata = speed.dating.cont[-learn,], type="response")
+(conf.matrix <- confusionMatrix(table(prediction > 0.5, speed.dating.cont$match[-learn] == 1)))
+# And well... The results are not bad, they are better than MLP, but there are still lots of false negatives
