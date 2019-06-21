@@ -361,6 +361,41 @@ knitr::kable(table(prediction, speed.dating.cont$match[-learn]), format="html", 
 ```
 </center>
 
+## SVM
+
+```{r include=F}
+svm.model.linear <- readRDS("svm-model-linear")
+svm.model <- readRDS("svm-model")
+svm.model2 <- readRDS("svm-model2")
+```
+
+The support vector machine has been tried with different kernels and parameters, and it has been built only with the continuous variables of the dataset. We decided to use the radial kernel in the model, since its training error is slightly less than the other options. `r round(1 - max(svm.model.linear$results[,2]), 3)` is the empirical error rate of the linear kernel, while radial kernel has an empirical error rate of `r round(1 - max(svm.model$results[,3]), 3)`. 
+
+<center>
+```{r svm-param-tuning, echo=F, out.extra="", fig.height=4, fig.width=5, fig.cap="Plot of the parameter tuning for SVM", fig.align="center", fig.pos="H"}
+plot(svm.model2$results[,3], col=0, ylim=c(.83,.85), xlim=c(3.3,5), xlab="C", ylab="Accuracy", las=1, cex.axis = .9, cex.lab=.8)
+grid()
+for (sigma in unique(svm.model2$results[,1])) {
+  points(x = svm.model2$results[svm.model2$results[,1] == sigma, 2], type="o", y = svm.model2$results[svm.model2$results[,1] == sigma, 3], pch=20, col=rainbow(4)[sigma / 0.005])
+}
+legend("bottomleft", legend = paste("Sigma =", unique(svm.model2$results[,1])), col=rainbow(4), lty=1, cex=.8, bg="white")
+points(svm.model2$results[order(svm.model2$results[,3], decreasing = T)[1],2:3], col="red")
+```
+</center>
+
+```{r include=F}
+prediction <- predict(svm.model, speed.dating.cont[-learn,])
+conf.matrix.svm <- confusionMatrix(table(prediction, speed.dating.cont$match[-learn]))
+```
+
+During the modelling, via 5-fold cross validation method, we found out that the optimal values for the parameters are \(C=4\) and the \(\sigma=0.01\). We decided to make some fine tuning of these parameters, again with 5-fold cross validation method. The range of values \{0.005,0.01,0.015,0.02\} has been used for the different \(\sigma\), and the values \{3.3,3.5,3.8,4,4.2,4.5\} as the possible costs. After the training, the best found model did not change \(\sigma\) from 0.01 and shifted cost (just a bit) to 4.2. This is represented in the figure above. But the new lowest empirical error is `r round(1 - max(svm.model2$results[,3]), 3)`, which, for this case, is worse than the original. Therefore, we stay with the original, non-tuned model. The confusion matrix of this model over the test set can be seen in the table below: The PPV is `r round(conf.matrix.svm$byClass[3], 3)` and the NPV is `r round(conf.matrix.svm$byClass[4], 3)`.
+
+<center>
+```{r conf-matrix-svm, echo=F, fig.align="center", out.extra=""}
+knitr::kable(as.matrix(conf.matrix.svm), format="html", booktabs=T, caption="Confusion matrix of the SVM model")
+```
+</center>
+
 ## Logistic regression
 
 ```{r include=F}
@@ -403,3 +438,20 @@ knitr::kable(new.data[,54:56], format="html", valign="H", caption="Table of the 
 </center>
 
 And now comes the twist: The data is taken from an actual couple, which means that the prediction should be 1 in all cases. As can be seen in the table above, most of the models return the same outcome for both rows, except for the neural network. It seems like these models do work, but this is not a significative enough example to proof their accuracy.
+
+# Conclusions
+
+Grosso modo, table below shows the results gathered throughout the different models. And, so, we know the best result has been obtained by the random forest model.
+
+<center>
+```{r final-results, echo=F, fig.align="center"}
+final.results <- data.frame()
+final.results <- rbind(final.results, c(conf.matrix.ann$overall[1], conf.matrix.ann$byClass[3:4]))
+final.results <- rbind(final.results, c(conf.matrix.rf$overall[1], conf.matrix.rf$byClass[3:4]))
+final.results <- rbind(final.results, c(conf.matrix.svm$overall[1], conf.matrix.svm$byClass[3:4]))
+final.results <- rbind(final.results, c(conf.matrix.glm$overall[1], conf.matrix.glm$byClass[3]))
+row.names(final.results) <- c("ANN", "Random forest", "SVM", "Logistic Reg.")
+colnames(final.results) <- c("Accuracy", "PPV", "NPV")
+knitr::kable(final.results, format="html", booktabs=T, caption="Final comparison of results on validation set")
+```
+</center>

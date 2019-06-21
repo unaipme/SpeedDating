@@ -299,7 +299,7 @@ conf.matrix.ann <- confusionMatrix(table(prediction, speed.dating.cont$match[-le
 knitr::kable(as.matrix(conf.matrix.ann), caption = "Confusion matrix for MLP", format="latex", valign="H", booktabs=T)
 ```
 
-As for the decay and sizes of the hidden layer, we have tried all possible combinatios of the ranges \{`r paste(seq(from=0.1, to=0.5, by=0.1), collapse = ",")`\} for the decay and [3,16] for the size. The result is the one shown in figure \ref{fig:ann-accuracy-plot}: The configuration that obtains the best accuracy, by a small gap, is a 4 neuron-sized hidden layer with a decay of 0.2. If anything, it is clear that adding more neurons to the hidden layer makes the end result worse, at least in this case. Also, size 4 is the best option, no matter the decay. Finally, for the chosen model, the confusion matrix can be seen on table \ref{tab:ann-confusion-matrix}. The PPV, `r round(conf.matrix.ann$byClass[3], 3)`, is pretty good, but the NPV is `r round(conf.matrix.ann$byClass[4], 3)` is too low, closing in to only 50%.
+As for the decay and sizes of the hidden layer, we have tried all possible combinatios of the ranges \{`r paste(seq(from=0.1, to=0.5, by=0.1), collapse = ",")`\} for the decay and [3,16] for the size. The result is the one shown in figure \ref{fig:ann-accuracy-plot}: The configuration that obtains the best accuracy, by a small gap, is a 4 neuron-sized hidden layer with a decay of 0.2. If anything, it is clear that adding more neurons to the hidden layer makes the end result worse, at least in this case. Also, size 4 is the best option, no matter the decay. Finally, for the chosen model, the confusion matrix over the test set can be seen on table \ref{tab:ann-confusion-matrix}. The PPV, `r round(conf.matrix.ann$byClass[3], 3)`, is pretty good, but the NPV is `r round(conf.matrix.ann$byClass[4], 3)` is too low, closing in to only 50%.
 
 ```{r ann-accuracy-plot, echo=F, fig.cap="Plot of the accuracy over the different configurations", fig.pos="th", out.extra="", fig.height=4}
 plot(nnet.train.k$results[,3], col=0, xlim=c(3,16), las=1, xaxt="n", xlab="", ylab="Accuracy", cex.axis=.75)
@@ -339,16 +339,34 @@ knitr::kable(table(prediction, speed.dating.cont$match[-learn]), format="latex",
 
 ## SVM
 
-The support vector machine has been tried with different kernels and parameters, and it has been built only with the continuous variables of the dataset. We decided to use the radial kernel in the model, since its training error is slightly less than the other options; "insert svm.model.linear$finalModel accuracy here" is the accuracy of the linear kernel, while radial kernel has "insert svm.model accuracy". 
+```{r include=F}
+svm.model.linear <- readRDS("svm-model-linear")
+svm.model <- readRDS("svm-model")
+svm.model2 <- readRDS("svm-model2")
+```
 
---Accuracy(cross-validation) vs cost - sigma thing here..find out how to reproduce that--
+The support vector machine has been tried with different kernels and parameters, and it has been built only with the continuous variables of the dataset. We decided to use the radial kernel in the model, since its training error is slightly less than the other options. `r round(1 - max(svm.model.linear$results[,2]), 3)` is the empirical error rate of the linear kernel, while radial kernel has an empirical error rate of `r round(1 - max(svm.model$results[,3]), 3)`. 
 
-During the modeling, with the cross validation method, we found out that optimal values for "cost is 4" and the "sigma paramenter is 0.010". We decided to make some fine tuning to these parameters, again with the cross validation method. Different values with with small differences are given to the training method as tuning grid. After a significant amount of time later, when the model training finally did reach to an end. Ideal value for sigma parameter is decided as 0.01 and 4.2 for the cost.
+```{r svm-param-tuning, echo=F, out.extra="", fig.height=4, fig.width=5, fig.cap="Plot of the parameter tuning for SVM", fig.align="center", fig.pos="H"}
+plot(svm.model2$results[,3], col=0, ylim=c(.83,.85), xlim=c(3.3,5), xlab="C", ylab="Accuracy", las=1, cex.axis = .9, cex.lab=.8)
+grid()
+for (sigma in unique(svm.model2$results[,1])) {
+  points(x = svm.model2$results[svm.model2$results[,1] == sigma, 2], type="o", y = svm.model2$results[svm.model2$results[,1] == sigma, 3], pch=20, col=rainbow(4)[sigma / 0.005])
+}
+legend("bottomleft", legend = paste("Sigma =", unique(svm.model2$results[,1])), col=rainbow(4), lty=1, cex=.8, bg="white")
+points(svm.model2$results[order(svm.model2$results[,3], decreasing = T)[1],2:3], col="red")
+```
 
-A prediction for the training set applied with the latest model that obtained, and the accuracy is good enough to sleep without having nightmares.
+```{r include=F}
+prediction <- predict(svm.model, speed.dating.cont[-learn,])
+conf.matrix.svm <- confusionMatrix(table(prediction, speed.dating.cont$match[-learn]))
+```
 
---accuracy table of the prediction here --
+During the modelling, via 5-fold cross validation method, we found out that the optimal values for the parameters are \(C=4\) and the \(\sigma=0.01\). We decided to make some fine tuning of these parameters, again with 5-fold cross validation method. The range of values \{0.005,0.01,0.015,0.02\} has been used for the different \(\sigma\), and the values \{3.3,3.5,3.8,4,4.2,4.5\} as the possible costs. After the training, the best found model did not change \(\sigma\) from 0.01 and shifted cost (just a bit) to 4.2. This is represented in figure \ref{fig:svm-param-tuning}. But the new lowest empirical error is `r round(1 - max(svm.model2$results[,3]), 3)`, which, for this case, is worse than the original. Therefore, we stay with the original, non-tuned model. The confusion matrix of this model over the test set can be seen in table \ref{tab:conf-matrix-svm}: The PPV is `r round(conf.matrix.svm$byClass[3], 3)` and the NPV is `r round(conf.matrix.svm$byClass[4], 3)`.
 
+```{r conf-matrix-svm, echo=F, fig.align="center", out.extra=""}
+knitr::kable(as.matrix(conf.matrix.svm), format="latex", booktabs=T, caption="Confusion matrix of the SVM model")
+```
 
 ## Logistic regression
 
@@ -358,7 +376,7 @@ prediction <- predict(glm.model, newdata = speed.dating.cont[-learn,], type="res
 conf.matrix.glm <- confusionMatrix(table(prediction > 0.5, speed.dating.cont$match[-learn] == 1))
 ```
 
-This type of generalized linear model is a typical choice for binary classification. However, cross-validation can not be used because it is deterministic, and would not give out different models after each run, so we have proceeded the regular way. With the logistic regression, we have calculated the probability of an instance to have 1 in the `match` target variable. The model built using all the continuous features results in the confusion matrix shown in table \ref{tab:conf-matrix-glm}, and the results are reasonably good. The accuracy (`r round(conf.matrix.glm$overall[1], 3)`) and PPV (`r round(conf.matrix.glm$byClass[3], 3)`) are significantly good for such a simple model and, compared to the other models so far, the NPV (`r round(conf.matrix.glm$byClass[4], 3)`) is also slightly better than the MLP.
+This type of generalized linear model is a typical choice for binary classification. However, cross-validation can not be used because it is deterministic, and would not give out different models after each run, so we have proceeded the regular way. With the logistic regression, we have calculated the probability of an instance to have 1 in the `match` target variable. The model built using all the continuous features results in the confusion matrix, generated with the test set, shown in table \ref{tab:conf-matrix-glm}, and the results are reasonably good. The accuracy (`r round(conf.matrix.glm$overall[1], 3)`) and PPV (`r round(conf.matrix.glm$byClass[3], 3)`) are significantly good for such a simple model and, compared to the other models so far, the NPV (`r round(conf.matrix.glm$byClass[4], 3)`) is also slightly better than the MLP.
 
 ```{r conf-matrix-glm, echo=F}
 knitr::kable(as.matrix(conf.matrix.glm), booktabs=T, format="latex", caption="Confusion matrix for the logistic regression", valign="H")
@@ -366,7 +384,8 @@ knitr::kable(as.matrix(conf.matrix.glm), booktabs=T, format="latex", caption="Co
 
 # Playing around with models
 
-For this section, we have simulated a date and collected real data from two people. With this information, we have created two new rows corresponding to a date between them in which each one of these people fulfilled the part of both subjects in the date. And so, we have used this new instances to put the created models into test. As both rows correspond to the same couple, the predictions for both should be the same. 
+For this section, we have simulated a date and collected real data from two people. With this information, we have created two new rows corresponding to a date between them in which each one of these people fulfilled the part of both subjects in the date. And so, we have used this new instances to put the created models into test. As both rows correspond to the same couple, the predictions for both should be the same.
+
 ```{r include=F}
 my.data <- data.frame(NA, 10, 20, 20, 20, 20, 10, 7, 7, 9, 9, 5, 7, 25, 15, 20, 15, 15, 10, 6, 8, 8, 8, 7, 7, 8, 6.5, 7, 7, 6, 9, 5, 7, 9, 0, 0, 10, 7, 2, 7, 1, 0, 10, 6, 7, 3, 0, NA, NA, NA, NA, NA, NA)
 my.data.2 <- data.frame(NA, 25, 15, 20, 15, 15, 10, 7, 8, 6.5, 7, 7, 6, 10, 20, 20, 20, 20, 10, 6, 8, 6, 5, 8, 7, 7, 9, 9, 5, 7, 7, 0, 8, 8, 7, 8, 8, 3, 5, 3, 0, 5, 8, 8, 9, 3, 0, NA, NA, NA, NA, NA, NA)
@@ -377,14 +396,30 @@ new.data <- rbind(my.data, my.data.2)
 mice.imp.new.data <- complete(mice(rbind(speed.dating.cont, new.data), method = 'pmm'))
 new.data[, c(1, 48:52)] <- mice.imp.new.data[1:2, c(1, 48:52)]
 
-new.data[,"Random forest"] <- predict(best.rf.model.2$finalModel, new.data[,-53], type="class")
-new.data[, "Logistic regression"] <- ifelse(predict(glm.model, new.data[,-53], type="response") > .5, 1, 0)
 new.data[, "Neural network"] <- predict(nnet.train.k$finalModel, new.data[,-53], type="class")
+new.data[,"Random forest"] <- predict(best.rf.model.2$finalModel, new.data[,-53], type="class")
+new.data[, "SVM"] <- predict(svm.model, new.data[,-53])
+new.data[, "Logistic regression"] <- ifelse(predict(glm.model, new.data[,-53], type="response") > .5, 1, 0)
 row.names(new.data) <- c("Row 1", "Row 2")
 ```
 
 ```{r new-data-pred, echo=F}
-knitr::kable(new.data[,54:56], format="latex", valign="H", caption="Table of the predictions for the new data", align=rep("r", 3), booktabs=T)
+knitr::kable(new.data[,54:57], format="latex", valign="H", caption="Table of the predictions for the new data", align=rep("r", 3), booktabs=T)
 ```
 
-And now comes the twist: The data is taken from an actual couple, which means that the prediction should be 1 in all cases. As can be seen in table \ref{tab:new-data-pred}, most of the models return the same outcome for both rows, except for the neural network. It seems like these models do work, but this is not a significative enough example to proof their accuracy.
+And now comes the twist: The data is taken from an actual couple, which means that the prediction should be 1 in all cases. As can be seen in table \ref{tab:new-data-pred}, most of the models return the same outcome for both rows, except for the neural network. Still, only random forest and logistic regression are the only one getting it right. However, with such a small new population, this shall not be considered as any kind of validation error.
+
+# Conclusions
+
+Grosso modo, table \ref{tab:final-results} shows the results gathered throughout the different models. And, so, we know the best result has been obtained by the random forest model.
+
+```{r final-results, echo=F, fig.align="center"}
+final.results <- data.frame()
+final.results <- rbind(final.results, c(conf.matrix.ann$overall[1], conf.matrix.ann$byClass[3:4]))
+final.results <- rbind(final.results, c(conf.matrix.rf$overall[1], conf.matrix.rf$byClass[3:4]))
+final.results <- rbind(final.results, c(conf.matrix.svm$overall[1], conf.matrix.svm$byClass[3:4]))
+final.results <- rbind(final.results, c(conf.matrix.glm$overall[1], conf.matrix.glm$byClass[3]))
+row.names(final.results) <- c("ANN", "Random forest", "SVM", "Logistic Reg.")
+colnames(final.results) <- c("Accuracy", "PPV", "NPV")
+knitr::kable(final.results, format="latex", booktabs=T, caption="Final comparison of results on validation set")
+```
