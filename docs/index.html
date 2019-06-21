@@ -73,6 +73,7 @@ $(document).ready(function () {
       <li><a href="#random-forests">Random forests</a></li>
       <li><a href="#logistic-regression">Logistic regression</a></li>
       </ul></li>
+      <li><a href="#playing-around-with-models">Playing around with models</a></li>
       </ul>
     </div>
 </div>
@@ -353,6 +354,63 @@ TRUE
 </table>
 </center>
 </div>
+</div>
+<div id="playing-around-with-models" class="section level1">
+<h1>Playing around with models</h1>
+<p>For this section, we have simulated a date and collected real data from two people. With this information, we have created two new rows corresponding to a date between them in which each one of these people fulfilled the part of both subjects in the date. And so, we have used this new instances to put the created models into test. As both rows correspond to the same couple, the predictions for both should be the same.</p>
+<center>
+<table>
+<caption>
+Table of the predictions for the new data
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+</th>
+<th style="text-align:right;">
+Random forest
+</th>
+<th style="text-align:right;">
+Logistic regression
+</th>
+<th style="text-align:right;">
+Neural network
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+Row 1
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+1
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Row 2
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+1
+</td>
+<td style="text-align:right;">
+0
+</td>
+</tr>
+</tbody>
+</table>
+</center>
+<p>And now comes the twist: The data is taken from an actual couple, which means that the prediction should be 1 in all cases. As can be seen in the table above, most of the models return the same outcome for both rows, except for the neural network. It seems like these models do work, but this is not a significative enough example to proof their accuracy.</p>
 </div>
 </div>
 

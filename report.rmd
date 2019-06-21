@@ -350,3 +350,28 @@ This type of generalized linear model is a typical choice for binary classificat
 ```{r conf-matrix-glm, echo=F}
 knitr::kable(as.matrix(conf.matrix.glm), booktabs=T, format="latex", caption="Confusion matrix for the logistic regression", valign="H")
 ```
+
+# Playing around with models
+
+For this section, we have simulated a date and collected real data from two people. With this information, we have created two new rows corresponding to a date between them in which each one of these people fulfilled the part of both subjects in the date. And so, we have used this new instances to put the created models into test. As both rows correspond to the same couple, the predictions for both should be the same. 
+```{r include=F}
+my.data <- data.frame(NA, 10, 20, 20, 20, 20, 10, 7, 7, 9, 9, 5, 7, 25, 15, 20, 15, 15, 10, 6, 8, 8, 8, 7, 7, 8, 6.5, 7, 7, 6, 9, 5, 7, 9, 0, 0, 10, 7, 2, 7, 1, 0, 10, 6, 7, 3, 0, NA, NA, NA, NA, NA, NA)
+my.data.2 <- data.frame(NA, 25, 15, 20, 15, 15, 10, 7, 8, 6.5, 7, 7, 6, 10, 20, 20, 20, 20, 10, 6, 8, 6, 5, 8, 7, 7, 9, 9, 5, 7, 7, 0, 8, 8, 7, 8, 8, 3, 5, 3, 0, 5, 8, 8, 9, 3, 0, NA, NA, NA, NA, NA, NA)
+names(my.data) <- names(speed.dating.cont)
+names(my.data.2) <- names(speed.dating.cont)
+new.data <- rbind(my.data, my.data.2)
+
+mice.imp.new.data <- complete(mice(rbind(speed.dating.cont, new.data), method = 'pmm'))
+new.data[, c(1, 48:52)] <- mice.imp.new.data[1:2, c(1, 48:52)]
+
+new.data[,"Random forest"] <- predict(best.rf.model.2$finalModel, new.data[,-53], type="class")
+new.data[, "Logistic regression"] <- ifelse(predict(glm.model, new.data[,-53], type="response") > .5, 1, 0)
+new.data[, "Neural network"] <- predict(nnet.train.k$finalModel, new.data[,-53], type="class")
+row.names(new.data) <- c("Row 1", "Row 2")
+```
+
+```{r new-data-pred, echo=F}
+knitr::kable(new.data[,54:56], format="latex", valign="H", caption="Table of the predictions for the new data", align=rep("r", 3), booktabs=T)
+```
+
+And now comes the twist: The data is taken from an actual couple, which means that the prediction should be 1 in all cases. As can be seen in table \ref{tab:new-data-pred}, most of the models return the same outcome for both rows, except for the neural network. It seems like these models do work, but this is not a significative enough example to proof their accuracy.

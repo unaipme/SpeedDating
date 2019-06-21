@@ -16,8 +16,8 @@ set.seed(666)
 speed.dating <- read.csv("speeddating.csv", na.strings = c("", "?"))
 
 ### Fixing feature name typos and inconsistencies
-names(speed.dating)[which(names(speed.dating) %in% c("sinsere_o", "ambitous_o", "d_sinsere_o", "d_ambitous_o", "ambtition_important", "d_ambtition_important"))] <- 
-  c("sincere_o", "ambitious_o", "d_sincere_o", "d_ambitious_o", "ambition_important", "d_ambition_important")
+names(speed.dating)[which(names(speed.dating) %in% c("sinsere_o", "ambitous_o", "d_sinsere_o", "d_ambitous_o", "intellicence_important", "ambtition_important", "d_ambtition_important"))] <- 
+  c("sincere_o", "ambitious_o", "d_sincere_o", "d_ambitious_o", "intelligence_important", "ambition_important", "d_ambition_important")
 
 ### MISSING DATA
 
@@ -226,6 +226,7 @@ which(sapply(speed.dating, anyNA))
 
 # After deleting all useless features and instances, let's impute the missing values. First, we use MICE.
 # MICE performs mixed imputation (mixed variables types) and is not determinist.
+#features.with.NA <- which(sapply(speed.dating, anyNA))
 mice.speed.dating <- mice(speed.dating[,c(which(sapply(speed.dating, anyNA)), 37:42, 47:52)], method = 'pmm')
 mice.speed.dating.complete <- complete(mice.speed.dating)
 mice.speed.dating.complete[apply(speed.dating, 1, anyNA),]
@@ -643,3 +644,28 @@ glm.model <- glm(match ~ ., data = speed.dating.cont[learn,], family = binomial(
 prediction <- predict(glm.model, newdata = speed.dating.cont[-learn,], type="response")
 (conf.matrix <- confusionMatrix(table(prediction > 0.5, speed.dating.cont$match[-learn] == 1)))
 # And well... The results are not bad, they are better than MLP, but there are still lots of false negatives
+
+### PLAYING AROUND WITH THE MODELS
+
+# Now we are going to add two custom rows, with information collected by us, and see what our models predict.
+names(speed.dating.cont)
+my.data <- data.frame(NA, 10, 20, 20, 20, 20, 10, 7, 7, 9, 9, 5, 7, 25, 15, 20, 15, 15, 10, 6, 8, 8, 8, 7, 7, 8, 6.5, 7, 7, 6, 9, 5, 7, 9, 0, 0, 10, 7, 2, 7, 1, 0, 10, 6, 7, 3, 0, NA, NA, NA, NA, NA, NA)
+my.data.2 <- data.frame(NA, 25, 15, 20, 15, 15, 10, 7, 8, 6.5, 7, 7, 6, 10, 20, 20, 20, 20, 10, 6, 8, 6, 5, 8, 7, 7, 9, 9, 5, 7, 7, 0, 8, 8, 7, 8, 8, 3, 5, 3, 0, 5, 8, 8, 9, 3, 0, NA, NA, NA, NA, NA, NA)
+names(my.data) <- names(speed.dating.cont)
+names(my.data.2) <- names(speed.dating.cont)
+new.data <- rbind(my.data, my.data.2)
+View(new.data)
+
+# Let's inputate the data that we could not realistically obtain with MICE
+rbind(speed.dating.cont, new.data)
+mice.imp.new.data <- complete(mice(rbind(speed.dating.cont, new.data), method = 'pmm'))
+new.data[, c(1, 48:52)] <- mice.imp.new.data[1:2, c(1, 48:52)]
+View(new.data)
+
+# Finally, make the predictions
+new.data$rf.pred <- predict(best.rf.model.2$finalModel, new.data[,-53], type="class")
+new.data$glm.pred <- ifelse(predict(glm.model, new.data[,-53], type="response") > .5, 1, 0)
+new.data$nnet.pred <- predict(nnet.train.k$finalModel, new.data[,-53], type="class")
+
+# These are the results.
+new.data[,54:56]
