@@ -558,30 +558,28 @@ confusionMatrix(cm.table)
 
 ###SVM
 
-##SVM for continuousousous or ALL? 
-#svm.data <- speed.dating
-#target <- 112
-svm.data <- speed.dating.cont
-target <- 53
+##SVM for continuousousous
 
-set.seed(666)
+#we have two options. i)the way that presented at the lab script ii) one liner cool train method with control training parameter
+
+#i)the way that presented at the lab script
 k <- 10
-folds <- sample(rep(1:k, length= nrow(svm.data)), nrow(svm.data), replace =FALSE)
-
+folds <- sample(rep(1:k, length= nrow(speed.dating.cont)), nrow(speed.dating.cont), replace =FALSE)
+target <- 53
 valid.error <- rep(0,k)
 
-train.svm.kCV <- function (which.kernel, myC, kCV=10)
+train.svm.kCV <- function (which.kernel, myC, myG, myE, kCV=10)
 {
   for (i in 1:kCV) 
   {  
-    train <- svm.data[folds!=i,] # for building the model (training)
-    valid <- svm.data[folds==i,] # for prediction (validation)
+    train <- speed.dating.cont[folds!=i,] # for building the model (training)
+    valid <- speed.dating.cont[folds==i,] # for prediction (validation)
     
     x_train <- train[,-target]
     t_train <- train[,target]
     
     switch(which.kernel,
-           linear={model <- svm(x_train, t_train, type="C-classification", cost=myC, kernel="linear", scale = FALSE)},
+           linear={model <- svm(x_train, t_train, type="C-classification", cost=myC, gamma = myG, epsilon = myE, kernel="linear", preProc = c("center", "scale"), scale = FALSE)},
            poly.2={model <- svm(x_train, t_train, type="C-classification", cost=myC, kernel="polynomial", degree=2, coef0=1, scale = FALSE)},
            poly.3={model <- svm(x_train, t_train, type="C-classification", cost=myC, kernel="polynomial", degree=3, coef0=1, scale = FALSE)},
            RBF   ={model <- svm(x_train, t_train, type="C-classification", cost=myC, kernel="radial", scale = FALSE)},
@@ -598,9 +596,10 @@ train.svm.kCV <- function (which.kernel, myC, kCV=10)
   100*sum(valid.error)/length(valid.error)
 }
 C <- 1
-
+G <- 0.5
+E <- 0
 ## Fit an SVM with linear kernel
-(VA.error.linear <- train.svm.kCV ("linear", myC=C)) #err:16.0838
+(VA.error.linear <- train.svm.kCV ("linear", myC = C, myG = G, myE = E)) #err:16.0838
 ## Fit an SVM with quadratic kernel 
 (VA.error.poly.2 <- train.svm.kCV ("poly.2", myC=C)) #err:16.1625
 ## Fit an SVM with cubic kernel
@@ -608,16 +607,28 @@ C <- 1
 ## Fit an SVM with radial kernel
 (VA.error.RBF <- train.svm.kCV ("RBF", myC=C)) #err:16.437
 
-###########havent done this, yet!########
-svm.tuning <- tune.svm( match~., data = svm.data, gamma = 2^(-1:1), cost = 2^(0:4))
-
-summary(svm.tuning)
-plot(svm.tuning)
-#########################################
-
-svm.model <- svm(svm.data[,-target], svm.data[,target], type="C-classification", cost=C, kernel="linear", scale = FALSE)
-svm.prediction <- predict(svm.model,svm.data[,-target])
-t_true <- svm.data[,target]
+#ii)cool one liner method
+#library(mlbench)
+svm.model <- train(match ~ ., data = speed.dating.cont, subset = learn, method = "svmRadial", preProc = c("center", "scale"), 
+                   trControl = trc.5CV, tuneLength = 10)
+svm.model <- readRDS("svm-model")
+# Save the results
+saveRDS(svm.model, "svm-model")
+(svm.model)
+#sigma held const at 0.0108 and C = 4
+#lets try again
+svm.grid <- expand.grid(sigma = c(0.005, 0.010, .015, 0.02, 0.05),
+                    C = c(3.5, 3.8, 4, 4.2, 4.5, 5, 5.5))
+svm.model2 <- train(match ~ ., data = speed.dating.cont, subset = learn, method = "svmRadial", preProc = c("center", "scale"), 
+                                 trControl = trc.5CV, tuneGrid = svm.grid, tuneLength = 10)
+svm.model2 <- readRDS("svm-model2")
+# Save the results
+saveRDS(svm.model2, "svm-model2")
+(svm.model2)
+#after the second pass, sigma =0.01 and C =3.5
+target <- 53
+svm.prediction <- predict(svm.model2,speed.dating.cont[,-target])
+t_true <- speed.dating.cont[,target]
 
 table(svm.prediction,t_true)
 
