@@ -337,6 +337,19 @@ prediction <- predict(best.rf.model.2$finalModel, speed.dating.cont[-learn,-51],
 knitr::kable(table(prediction, speed.dating.cont$match[-learn]), format="latex", caption = "Confusion matrix for the random forest", booktabs=T)
 ```
 
+## SVM
+
+The support vector machine has been tried with different kernels and parameters, and it has been built only with the continuous variables of the dataset. We decided to use the radial kernel in the model, since its training error is slightly less than the other options; "insert svm.model.linear$finalModel accuracy here" is the accuracy of the linear kernel, while radial kernel has "insert svm.model accuracy". 
+
+--Accuracy(cross-validation) vs cost - sigma thing here..find out how to reproduce that--
+
+During the modeling, with the cross validation method, we found out that optimal values for "cost is 4" and the "sigma paramenter is 0.010". We decided to make some fine tuning to these parameters, again with the cross validation method. Different values with with small differences are given to the training method as tuning grid. After a significant amount of time later, when the model training finally did reach to an end. Ideal value for sigma parameter is decided as 0.01 and 4.2 for the cost.
+
+A prediction for the training set applied with the latest model that obtained, and the accuracy is good enough to sleep without having nightmares.
+
+--accuracy table of the prediction here --
+
+
 ## Logistic regression
 
 ```{r include=F}

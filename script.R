@@ -608,33 +608,42 @@ E <- 0
 ## Fit an SVM with radial kernel
 (VA.error.RBF <- train.svm.kCV ("RBF", myC=C)) #err:16.437
 
-#ii)cool one liner method
+#ii)cool one liner method ---YO, IGNORE EVERYTHING ELSE ABOUT SVM - THIS IS THE REAL SHIT 
+
 #library(mlbench)
-svm.model <- train(match ~ ., data = speed.dating.cont, subset = learn, method = "svmRadial", preProc = c("center", "scale"), 
-                   trControl = trc.5CV, tuneLength = 10)
+
+#svm.grid.linear <- expand.grid(gamma = c(0.1, 0.5, 1, 1.5, 2),
+#                               C = c(3.5, 3.8, 4, 4.2, 4.5, 5, 5.5))
+#svm.model.linear <- train(match ~ ., data = speed.dating.cont, subset = learn, method = "svmLinear", preProc = c("center", "scale"), 
+#                          trControl = trc.5CV, tuneGrid = svm.grid.linear, tuneLength = 10)
+svm.model.linear <- readRDS("svm-model-linear")
+saveRDS(svm.model.linear, "svm-model-linear")
+
+
+#svm.model <- train(match ~ ., data = speed.dating.cont, subset = learn, method = "svmRadial", preProc = c("center", "scale"), 
+#                   trControl = trc.5CV, tuneLength = 10)
 svm.model <- readRDS("svm-model")
-# Save the results
 saveRDS(svm.model, "svm-model")
 (svm.model)
 #sigma held const at 0.0108 and C = 4
-#lets try again
-svm.grid <- expand.grid(sigma = c(0.005, 0.010, .015, 0.02, 0.05),
-                    C = c(3.5, 3.8, 4, 4.2, 4.5, 5, 5.5))
-svm.model2 <- train(match ~ ., data = speed.dating.cont, subset = learn, method = "svmRadial", preProc = c("center", "scale"), 
-                                 trControl = trc.5CV, tuneGrid = svm.grid, tuneLength = 10)
+
+###Radial kernel is better than the linear one, lets stick with that and do some fine tuning
+#svm.grid <- expand.grid(sigma = c(0.005, 0.010, .015, 0.02 ),
+#                    C = c(3.3, 3.5, 3.8, 4, 4.2, 4.5, 5))
+#svm.model2 <- train(match ~ ., data = speed.dating.cont, subset = learn, method = "svmRadial", preProc = c("center", "scale"), 
+#                                 trControl = trc.5CV, tuneGrid = svm.grid, tuneLength = 10)
 svm.model2 <- readRDS("svm-model2")
-# Save the results
 saveRDS(svm.model2, "svm-model2")
-(svm.model2)
-#after the second pass, sigma =0.01 and C =3.5
+#after the second pass, sigma =0.01 and C =4.2
 target <- 53
-svm.prediction <- predict(svm.model2,speed.dating.cont[,-target])
-t_true <- speed.dating.cont[,target]
+svm.prediction <- predict(svm.model2, speed.dating.cont[-learn,])
+t_true <- speed.dating.cont[-learn,target]
 
 table(svm.prediction,t_true)
-
-# compute testing error (in %)
 (sum(svm.prediction != t_true)/length(t_true))
+
+#plot(svm.model2, speed.dating.cont[learn,])
+
 
 ### LOGISTIC REGRESSION
 
