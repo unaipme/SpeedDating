@@ -424,15 +424,18 @@ bayes.test.error
 ##Holds for cont values
 
 #knn reqs variables to be normalized and/or scaled. Lets go with centralizing and scaling, tuneLength= possible number of k's to evaluate
-knn.fit <- train(match ~ ., data= speed.dating.cont, subset= learn, method= "knn", trControl= trc.10CV, preProcess= c("center", "scale"), tuneLength = 50)
+#knn.fit <- train(match ~ ., data= speed.dating.cont, subset= learn, method= "knn", trControl= trc.10CV, preProcess= c("center", "scale"), tuneLength = 50)
+knn.fit <- readRDS("knn-model")
+saveRDS(knn.fit, "knn-model")
 knn.fit
-#final vllue decided for k=23, here is the accuracy vs #neighbors plot
+
+
+#final vlaue decided for k=17, here is the accuracy vs #neighbors plot
 plot(knn.fit) 
 
-knn.prediction <- predict(knn.fit, newdata = speed.dating.cont[-learn])
-knn.prediction
-confusionMatrix(knn.prediction, speed.dating.cont[-learn,]$match)
-mean(knn.prediction == knn.test$match)
+knn.prediction <- predict(knn.fit, newdata = speed.dating.cont[-learn,])
+conf.matrix.knn <- confusionMatrix(table(knn.prediction, speed.dating.cont$match[-learn]))
+conf.matrix.knn
 
 ### RANDOM FORESTS
 

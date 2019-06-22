@@ -368,6 +368,31 @@ During the modelling, via 5-fold cross validation method, we found out that the 
 knitr::kable(as.matrix(conf.matrix.svm), format="latex", booktabs=T, caption="Confusion matrix of the SVM model")
 ```
 
+## KNN
+
+```{r include=F}
+knn.fit <- readRDS("knn-model")
+```
+
+The k nearset neighbors method has been tried with 10-fold cross validation method and we found out that optimal value for number of neighbors is \(k=17\). Change in accuracy with respect to number of neighbors can be examined in the figure \ref{tab:knn-lot}  
+
+
+```{r knn-plot, echo=F, out.extra="", fig.height=4, fig.width=5, fig.cap="Plot of KNN training", fig.align="center", fig.pos="H"}
+plot(knn.fit, ylab = "Accuracy", xlab = "# Neighbors")
+#plot(knn.fit$results[,2])
+```
+
+```{r include=F}
+knn.prediction <- predict(knn.fit, newdata = speed.dating.cont[-learn,])
+conf.matrix.knn <- confusionMatrix(table(knn.prediction, speed.dating.cont$match[-learn]))
+```
+
+The confusion matrix of this model over the test set can be seen in table \ref{tab:conf-matrix-knn}: The PPV is `r round(conf.matrix.knn$byClass[3], 3)` and the NPV is `r round(conf.matrix.knn$byClass[4], 3)`.
+
+```{r conf-matrix-knn, echo=F, fig.align="center", out.extra=""}
+knitr::kable(as.matrix(conf.matrix.knn), format="latex", booktabs=T, caption="Confusion matrix of the KNN model")
+```
+
 ## Logistic regression
 
 ```{r include=F}
