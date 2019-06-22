@@ -16,8 +16,8 @@ set.seed(666)
 speed.dating <- read.csv("speeddating.csv", na.strings = c("", "?"))
 
 ### Fixing feature name typos and inconsistencies
-names(speed.dating)[which(names(speed.dating) %in% c("sinsere_o", "ambitous_o", "d_sinsere_o", "d_ambitous_o", "intellicence_important", "ambtition_important", "d_ambtition_important"))] <- 
-  c("sincere_o", "ambitious_o", "d_sincere_o", "d_ambitious_o", "intelligence_important", "ambition_important", "d_ambition_important")
+names(speed.dating)[which(names(speed.dating) %in% c("sinsere_o", "ambitous_o", "d_sinsere_o", "d_ambitous_o", "ambtition_important", "d_ambtition_important"))] <- 
+  c("sincere_o", "ambitious_o", "d_sincere_o", "d_ambitious_o", "ambition_important", "d_ambition_important")
 
 ### MISSING DATA
 
@@ -371,72 +371,6 @@ legend("bottomleft", legend=paste("decay =", seq(from=0.1, to=0.5, by=0.1)), col
 prediction <- predict(nnet.train.k$finalModel, newdata = speed.dating.cont[-learn,], type = "class")
 confusionMatrix(table(prediction, speed.dating.cont$match[-learn]))
 
-### BAYES
-##Cont. vars are discarded, only categorical ones are investigated with bayes
-
-#default value for laplace = 0, changing that to 1 didnt have any impact on the error rates.
-bayes.model <- naiveBayes(match ~ ., data=speed.dating.cat[learn,], laplace = 0)
-
-#the apparent(training) error 0.7878
-bayes.training <- predict(bayes.model, newdata=speed.dating.cat[learn,-60])
-confusionMatrix(bayes.training, speed.dating.cat$match[learn])
-
-#test(prediction) error 0.7972
-bayes.prediction <- predict(bayes.model, newdata=speed.dating.cat[-learn,-60])
-confusionMatrix(bayes.prediction, speed.dating.cat$match[-learn])
-
-##ALTERNATIVE Bayes
-##this or all of the below
-library(klaR)
-bayes.model <- train(match ~., data=speed.dating.cat, subset = learn, method="nb", trControl=trc.5CV)
-bayes.prediction <- predict(bayes.model, newdata=speed.dating.cat[-learn,])
-confusionMatrix(bayes.prediction, speed.dating.cat$match[-learn])
-##all of the below...
-k <- 10
-folds <- createFolds(speed.dating.cat$match, k, list=TRUE, returnTrain=FALSE)
-cv.results <- matrix(rep(0,3*k), nrow = k)
-colnames(cv.results)<-c("fold","Train Err", "Test Err")
-cv.results[, "Train Err"] <- 0
-cv.results[, "Test Err"] <- 0
-lap <- 0
-target <- 60
-for (i in 1:k){
-  train <- speed.dating.cat[-folds[[i]],]
-  test <- speed.dating.cat[folds[[i]],]
-  bayes.model <- naiveBayes(match ~ ., data=train, laplace=lap)
-  train.prediction <- predict(bayes.model, newdata=train[,-targer]) #excluding the target column does not change anything
-  (tt <- table(Truth=speed.dating$match[-folds[[i]]], Predicted=train.prediction))
-  cv.results[i, "Train Err"]<-100*(1-sum(diag(tt))/sum(tt))
-  
-  test.prediction <- predict(bayes.model, newdata=test[,-targer]) #excluding the target column does not change anything
-  (tt <- table(Truth=speed.dating$match[folds[[i]]], Predicted=test.prediction))
-  cv.results[i, "Test Err"]<-100*(1-sum(diag(tt))/sum(tt))
-  cv.results[i, "fold"] <- i
-  
-}
-cv.results
-bayes.training.error <- mean(cv.results[,"Train Err"])
-bayes.training.error 
-bayes.test.error <- mean(cv.results[,"Test Err"])
-bayes.test.error
-
-### KNN 
-##Holds for cont values
-
-#knn reqs variables to be normalized and/or scaled. Lets go with centralizing and scaling, tuneLength= possible number of k's to evaluate
-#knn.fit <- train(match ~ ., data= speed.dating.cont, subset= learn, method= "knn", trControl= trc.10CV, preProcess= c("center", "scale"), tuneLength = 50)
-knn.fit <- readRDS("knn-model")
-saveRDS(knn.fit, "knn-model")
-knn.fit
-
-
-#final vlaue decided for k=17, here is the accuracy vs #neighbors plot
-plot(knn.fit) 
-
-knn.prediction <- predict(knn.fit, newdata = speed.dating.cont[-learn,])
-conf.matrix.knn <- confusionMatrix(table(knn.prediction, speed.dating.cont$match[-learn]))
-conf.matrix.knn
-
 ### RANDOM FORESTS
 
 # We are going to build two random forests, one with the continuous features and the other with the categorical ones
@@ -470,7 +404,8 @@ accuracies <- rep(NA, (225 - 75) / 25)
 ###############################################################################################################################
 # mtry <- floor(sqrt(ncol(speed.dating.cat)) * 3)                                                                             #
 # for (ntree in seq(from = 75, to = 225, by = 25)) {                                                                          #
-#   random.tree <- train(match ~ ., data = speed.dating.cat, subset = learn, method="rf", proximity = F, trControl=trc.10CV,                 #
+#   print(paste("ntree =", ntree))                                                                                            #
+#   random.tree <- train(match ~ ., data = speed.dating.cont, subset = learn, method="rf", proximity = F, trControl=trc.10CV, #
 #                        tuneGrid = expand.grid(mtry = mtry), ntree = ntree)                                                  #
 #   accuracies[((ntree - 75) / 25) + 1] <- random.tree$results$Accuracy                                                       #
 #   if (!is.na(best.rf.model)) {                                                                                              #
@@ -502,11 +437,11 @@ best.rf.model$finalModel
 rf.imp.barplot <- barplot(sort(best.rf.model$finalModel$importance, decreasing = T)[1:10], col=rev(brewer.pal(10, "RdYlGn")))
 text(rf.imp.barplot, y = 1, srt=90, labels=names(speed.dating.cont)[order(best.rf.model$finalModel$importance, decreasing = T)][1:10],
      xpd=T, adj = 0)
-# And... who would have guessed? "like" is the most important feature (but a pretty significative gap)
-# Looking back at the meaning of "like", it means whether the subject liked (and, we mean, **just liked**) their partner. And:
-nrow(speed.dating[speed.dating$like == 1,]) - nrow(speed.dating[speed.dating$like == 1 & speed.dating$match == 0,])
-# Only once in the dataset happens the case in which a subject likes the partner but they do not match.
-# Let's try building another forest but without the "like" feature
+# And... who would have guessed? "like" is the most important feature (with a significative gap)
+# Looking back at the meaning of "like", it means whether the subject liked (and, we mean, **just liked**) their partner.
+# Obviously if one of the subjects likes the other there ir a high probability that there ends up being a match.
+# But we can say "like" is an a posteriori, summarizing variable. What does "liking" mean? How does it translate to
+# the other characteristics of the subject?
 
 
 best.rf.model.2 <- NA
@@ -534,6 +469,7 @@ accuracies.2 <- readRDS("rf-accuracies2")
 saveRDS(best.rf.model.2, "best-rf-model2")
 saveRDS(accuracies.2, "rf-accuracies2")
 
+# Let's plot the accuracies of different mtry values
 plot(accuracies.2, xaxt="n", type="o", pch=20, ylim=c(.82,.9), col="royalblue1", ylab="Accuracy", xlab="ntree", las=1)
 points(accuracies, type="o", pch=20)
 grid()
@@ -554,7 +490,7 @@ best.rf.model$finalModel$confusion
 
 # Validation:
 prediction <- predict(best.rf.model.2$finalModel, speed.dating.cont[-learn,-51], type="class")
-table(prediction, speed.dating.cont$match[-learn])
+(cm.table <- table(prediction, speed.dating.cont$match[-learn]))
 confusionMatrix(cm.table)
 # And the PPV and NPV are actually really good, both close to 95%. This model is GOOD!!
 # It has score way above in both specificity and (therefore) in NPV, which is the biggest
@@ -619,16 +555,25 @@ names(my.data.2) <- names(speed.dating.cont)
 new.data <- rbind(my.data, my.data.2)
 View(new.data)
 
+# Normalize out of 100 scores
+new.data[1,2:7] <- norm.score(new.data[1, 2:7])
+new.data[2,2:7] <- norm.score(new.data[2, 2:7])
+new.data[1,14:19] <- norm.score(new.data[1, 14:19])
+new.data[2,14:19] <- norm.score(new.data[2, 14:19])
+
+new.data[,c(2:7,14:19)] <- scale(new.data[1:2,c(2:7,14:19)], scale = F)
+
 # Let's inputate the data that we could not realistically obtain with MICE
-rbind(speed.dating.cont, new.data)
+#rbind(speed.dating.cont, new.data)
 mice.imp.new.data <- complete(mice(rbind(speed.dating.cont, new.data), method = 'pmm'))
-new.data[, c(1, 48:52)] <- mice.imp.new.data[1:2, c(1, 48:52)]
+new.data[, c(1, 48:52)] <- mice.imp.new.data[(nrow(mice.imp.new.data) - 1):(nrow(mice.imp.new.data)), c(1, 48:52)]
 View(new.data)
 
 # Finally, make the predictions
-new.data$rf.pred <- predict(best.rf.model.2$finalModel, new.data[,-53], type="class")
-new.data$glm.pred <- ifelse(predict(glm.model, new.data[,-53], type="response") > .5, 1, 0)
-new.data$nnet.pred <- predict(nnet.train.k$finalModel, new.data[,-53], type="class")
+new.data[, "Neural network"] <- predict(nnet.train.k$finalModel, new.data[,-53], type="class")
+new.data[,"Random forest"] <- predict(best.rf.model.2$finalModel, new.data[,-53], type="class")
+new.data[, "SVM"] <- predict(svm.model, new.data[,-53])
+new.data[, "Logistic regression"] <- ifelse(predict(glm.model, new.data[,-53], type="response") > .5, 1, 0)
 
 # These are the results.
-new.data[,54:56]
+new.data[,54:57]

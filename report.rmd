@@ -54,6 +54,8 @@ Below, a detailed explanation of the variables. The names of the variables are n
 - `[d_]pref_o_{attractive|sincere|intelligence|funny|ambitious|shared_interests}`: A score from 0 to 100 representing the preference of the subject 2 regarding each one of the characteristics mentioned earlier in their partner.
 - `[d_]{attractive|sincere|intelligence|funny|ambitious|shared_interests}_o`: A score from 0 to 10 representing the score subject 2 gives to subject 1 for each of the characteristics.
 - `[d_]{attractive|sincere|intelligence|funny|ambitious|shared_interests}_important`: A score from 0 to 100 representing how important is for the subject 1 each of the characteristics in their partner.
+- `[d_]{attractive|sincere|intelligence|funny|ambitious}`: A score from 0 to 10 representing the opinion subject 1 has of themselves about the five criteria.
+- `[d_]{attractive|sincere|intelligence|funny|ambitious|shared_interests}_partner`: A score from 0 to 10 representing the opinion subject 1 made of subject 2 after the date.
 - `[d_]{sports|tvsports|exercise|dining|museums|art|hiking|gaming|clubbing|reading|tv |theater|movies|concerts|music|shopping|yoga}`: A score from 0 to 10 representing the interest the subject 1 has in each of the topics.
 - `[d_]interests_correlate`: The correlation, measured in the range [-1,1], of the interests of the two subjects.
 - `[d_]expected_happy_with_sd_people`: A score from 0 to 10 of how satisfied the subject 1 expects to be with the people met in the speed dating.
@@ -286,8 +288,8 @@ speed.dating.cont <- data.frame(scale(speed.dating[,sapply(speed.dating, is.nume
 speed.dating.cat <- speed.dating[,sapply(speed.dating, is.factor)]
 ```
 
-Next, the results and conclusions for the four different predictors that we tried. These are the MLP articial neural network, random forests, \textcolor{red}{and so on and so forth}.
-
+Next, the results and conclusions for the four different predictors that we tried. These are the MLP articial neural network, rests, support vector machines (SVM) and logistic regression.
+ 
 ## MLP Artificial Neural Networks
 
 The MultiLayer Perceptron neural network has been tried with several different decays and sizes, and it has been built only with the continuous variables of the dataset. However, we have manually tuned the maximum amount of iterations allowed for back-propagation by visually analyzing the text output. First, with `maxit` set to 150, it was obvious that when the maximum was reached the weights still had room for improvement. We have settled in with 400. Even though the cost still was getting reduced iteration by iteration, the difference stopped being so significant after around 300 iterations.
@@ -330,7 +332,9 @@ prediction <- predict(best.rf.model.2$finalModel, speed.dating.cont[-learn,-51],
 conf.matrix.rf <- confusionMatrix(table(prediction, speed.dating.cont$match[-learn]))
 ```
 
-When plotting the importance of the each variables, we found out that the feature with the highest importance (by a significant gap) was `like`, which expresses whether the subject liked their date. In the dataset, there is only one observation in which the subject liked the date but there was no match. So, we decided to try to build another random forest without the bias of this feature, and the result can be seen in figure \ref{fig:rf-var-importance}. We think no one will be shocked by how attractiveness and shared interests play such an important role in deciding the outcome of a date. But the most important characteristic seems to be whether the partner is funny or not. Now, that is more of a surprise. Table \ref{tab:confusion-matrix-rf} shows the confusion matrix obtained by the prediction, which scores a PPV of `r round(conf.matrix.rf$byClass[3], 3)` and a NPV of `r round(conf.matrix.rf$byClass[4], 3)`, which tells us obviously that this is a very reliable model, the most so far.
+When plotting the importance of the each variables, we found out that the feature with the highest importance (by a significant gap) was `like`, which expresses whether the subject liked their date, out of 10. This feature can be seen as a posteriori feature, kind of a summary of the rest of features. Noise aside, it could be seen as a linearly dependent feature. So, we decided to try to build another random forest without the bias of the `like` feature, and the result can be seen in figure \ref{fig:rf-var-importance}. We think no one will be shocked by how attractiveness and shared interests play such an important role in deciding the outcome of a date. But the most important characteristic seems to be whether the partner is funny or not. Now, that is more of a surprise.
+
+Table \ref{tab:confusion-matrix-rf} shows the confusion matrix obtained by the prediction, which scores a PPV of `r round(conf.matrix.rf$byClass[3], 3)` and a NPV of `r round(conf.matrix.rf$byClass[4], 3)`, which tells us obviously that this is a very reliable model, the most so far. However, what the table does not show is the OOB-error, which is at `r round(rev(best.rf.model.2$finalModel$err.rate[,1])[1] * 100, 2)`%, even though it does not show with the our test set.
 
 ```{r confusion-matrix-rf, echo=F}
 prediction <- predict(best.rf.model.2$finalModel, speed.dating.cont[-learn,-51], type="class")
@@ -368,31 +372,6 @@ During the modelling, via 5-fold cross validation method, we found out that the 
 knitr::kable(as.matrix(conf.matrix.svm), format="latex", booktabs=T, caption="Confusion matrix of the SVM model")
 ```
 
-## KNN
-
-```{r include=F}
-knn.fit <- readRDS("knn-model")
-```
-
-The k nearset neighbors method has been tried with 10-fold cross validation method and we found out that optimal value for number of neighbors is \(k=17\). Change in accuracy with respect to number of neighbors can be examined in the figure \ref{tab:knn-lot}  
-
-
-```{r knn-plot, echo=F, out.extra="", fig.height=4, fig.width=5, fig.cap="Plot of KNN training", fig.align="center", fig.pos="H"}
-plot(knn.fit, ylab = "Accuracy", xlab = "# Neighbors")
-#plot(knn.fit$results[,2])
-```
-
-```{r include=F}
-knn.prediction <- predict(knn.fit, newdata = speed.dating.cont[-learn,])
-conf.matrix.knn <- confusionMatrix(table(knn.prediction, speed.dating.cont$match[-learn]))
-```
-
-The confusion matrix of this model over the test set can be seen in table \ref{tab:conf-matrix-knn}: The PPV is `r round(conf.matrix.knn$byClass[3], 3)` and the NPV is `r round(conf.matrix.knn$byClass[4], 3)`.
-
-```{r conf-matrix-knn, echo=F, fig.align="center", out.extra=""}
-knitr::kable(as.matrix(conf.matrix.knn), format="latex", booktabs=T, caption="Confusion matrix of the KNN model")
-```
-
 ## Logistic regression
 
 ```{r include=F}
@@ -418,8 +397,15 @@ names(my.data) <- names(speed.dating.cont)
 names(my.data.2) <- names(speed.dating.cont)
 new.data <- rbind(my.data, my.data.2)
 
+new.data[1,2:7] <- norm.score(new.data[1, 2:7])
+new.data[2,2:7] <- norm.score(new.data[2, 2:7])
+new.data[1,14:19] <- norm.score(new.data[1, 14:19])
+new.data[2,14:19] <- norm.score(new.data[2, 14:19])
+
+new.data[,c(2:7,14:19)] <- scale(new.data[1:2,c(2:7,14:19)], scale = F)
+
 mice.imp.new.data <- complete(mice(rbind(speed.dating.cont, new.data), method = 'pmm'))
-new.data[, c(1, 48:52)] <- mice.imp.new.data[1:2, c(1, 48:52)]
+new.data[, c(1, 48:52)] <- mice.imp.new.data[(nrow(mice.imp.new.data) - 1):(nrow(mice.imp.new.data)), c(1, 48:52)]
 
 new.data[, "Neural network"] <- predict(nnet.train.k$finalModel, new.data[,-53], type="class")
 new.data[,"Random forest"] <- predict(best.rf.model.2$finalModel, new.data[,-53], type="class")
@@ -432,7 +418,7 @@ row.names(new.data) <- c("Row 1", "Row 2")
 knitr::kable(new.data[,54:57], format="latex", valign="H", caption="Table of the predictions for the new data", align=rep("r", 3), booktabs=T)
 ```
 
-And now comes the twist: The data is taken from an actual couple, which means that the prediction should be 1 in all cases. As can be seen in table \ref{tab:new-data-pred}, most of the models return the same outcome for both rows, except for the neural network. Still, only random forest and logistic regression are the only one getting it right. However, with such a small new population, this shall not be considered as any kind of validation error.
+And now comes the twist: The data is taken from an actual couple, which means that the prediction should be 1 in all cases. As can be seen in table \ref{tab:new-data-pred}, all models return the same outcome for both rows. And what is better is that most of them also predict correctly, except for SVM. However, with such a small new population, this shall not be considered as any kind of validation error.
 
 # Conclusions
 
@@ -443,8 +429,18 @@ final.results <- data.frame()
 final.results <- rbind(final.results, c(conf.matrix.ann$overall[1], conf.matrix.ann$byClass[3:4]))
 final.results <- rbind(final.results, c(conf.matrix.rf$overall[1], conf.matrix.rf$byClass[3:4]))
 final.results <- rbind(final.results, c(conf.matrix.svm$overall[1], conf.matrix.svm$byClass[3:4]))
-final.results <- rbind(final.results, c(conf.matrix.glm$overall[1], conf.matrix.glm$byClass[3]))
+final.results <- rbind(final.results, c(conf.matrix.glm$overall[1], conf.matrix.glm$byClass[3:4]))
 row.names(final.results) <- c("ANN", "Random forest", "SVM", "Logistic Reg.")
 colnames(final.results) <- c("Accuracy", "PPV", "NPV")
-knitr::kable(final.results, format="latex", booktabs=T, caption="Final comparison of results on validation set")
+knitr::kable(round(final.results, 3), format="latex", booktabs=T, caption="Final comparison of results on validation set")
 ```
+
+We found that the predictors might be biased because it mixes up regular features with what could be considered, in other contexts, linearly dependent features. That is the case of the `like` feature, as evidenced by the random forest predictor. But this dataset is special, because it depends on human subjectivity. To give or receive an overall good calification in the five criterias, and it being nicely tied to the preferences of the subject (the out of 100 scores), does not really mean the date will result in a match.
+
+Still, as the confusion matrix of table \ref{tab:final-results} shows, some of the models give really good results. Preliminar results of the first models showcased an alarmingly low NPV (as low as 50%), meaning that models were prone to predict negatively in most cases. This results in a good proportion of true negatives, but too many matches were predicted as non-matches. And, judging by the proportion of matches in the dataset, it kind of sounds reasonable.
+
+We were not able to find any better tuning for the MLP neural network or for the SVM. Actually, all attempts at tuning the SVM parameters ended up with worse results. It seems like the function is able to estimate the best parameter options by itself, or maybe the default values were just the most appropriate for our dataset. Meanwhile, there just is not much we can do with logistic regression, and it shows in the results.
+
+But, all in all, the final results are really good, considering the dirtiness (it needed a lot of preprocessing) and subjectiveness of the chosen dataset, we have found a very good model. We are talking about the rest, which has a balanced accuracy of `r mean(as.numeric(final.results[2,2:3]))`. It is also able to accurately match the couple from previous section.
+
+We do realize that, comparing the high PPV and NPV to the OOB-error (which is `r round(rev(best.rf.model.2$finalModel$err.rate[,1])[1] * 100, 2)`%) it does show that there is some margin for improvement. The forest might be overfit, or we might have used too many features to build the model. The numbers with the training set are good but, to be sure, more data would be ideal. It always is ideal.

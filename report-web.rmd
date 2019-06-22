@@ -352,7 +352,7 @@ prediction <- predict(best.rf.model.2$finalModel, speed.dating.cont[-learn,-51],
 conf.matrix.rf <- confusionMatrix(table(prediction, speed.dating.cont$match[-learn]))
 ```
 
-When plotting the importance of the each variables, we found out that the feature with the highest importance (by a significant gap) was `like`, which expresses whether the subject liked their date. In the dataset, there is only one observation in which the subject liked the date but there was no match. So, we decided to try to build another random forest without the bias of this feature, and the result can be seen in the barplot above. We think no one will be shocked by how attractiveness and shared interests play such an important role in deciding the outcome of a date. But the most important characteristic seems to be whether the partner is funny or not. Now, that is more of a surprise. The table below shows the confusion matrix obtained by the prediction, which scores a PPV of `r round(conf.matrix.rf$byClass[3], 3)` and a NPV of `r round(conf.matrix.rf$byClass[4], 3)`.
+When plotting the importance of the each variables, we found out that the feature with the highest importance (by a significant gap) was `like`, which expresses whether the subject liked their date. In the dataset, there is only one observation in which the subject liked the date but there was no match. So, we decided to try to build another random forest without the bias of this feature, and the result can be seen in the barplot above. We think no one will be shocked by how attractiveness and shared interests play such an important role in deciding the outcome of a date. But the most important characteristic seems to be whether the partner is funny or not. Now, that is more of a surprise. The table below shows the confusion matrix obtained by the prediction, which scores a PPV of `r round(conf.matrix.rf$byClass[3], 3)` and a NPV of `r round(conf.matrix.rf$byClass[4], 3)`. However, what the table does not show is the OOB-error, which is at `r round(rev(best.rf.model.2$finalModel$err.rate[,1])[1] * 100, 2)`%, even though it does not show with the our test set.
 
 <center>
 ```{r confusion-matrix-rf, echo=F}
@@ -441,17 +441,27 @@ And now comes the twist: The data is taken from an actual couple, which means th
 
 # Conclusions
 
-Grosso modo, table below shows the results gathered throughout the different models. And, so, we know the best result has been obtained by the random forest model.
+Grosso modo, the table below shows the results gathered throughout the different models. And, so, we know the best result has been obtained by the random forest model.
 
 <center>
-```{r final-results, echo=F, fig.align="center"}
+```{r final-results, echo=F}
 final.results <- data.frame()
 final.results <- rbind(final.results, c(conf.matrix.ann$overall[1], conf.matrix.ann$byClass[3:4]))
 final.results <- rbind(final.results, c(conf.matrix.rf$overall[1], conf.matrix.rf$byClass[3:4]))
 final.results <- rbind(final.results, c(conf.matrix.svm$overall[1], conf.matrix.svm$byClass[3:4]))
-final.results <- rbind(final.results, c(conf.matrix.glm$overall[1], conf.matrix.glm$byClass[3]))
+final.results <- rbind(final.results, c(conf.matrix.glm$overall[1], conf.matrix.glm$byClass[3:4]))
 row.names(final.results) <- c("ANN", "Random forest", "SVM", "Logistic Reg.")
 colnames(final.results) <- c("Accuracy", "PPV", "NPV")
-knitr::kable(final.results, format="html", booktabs=T, caption="Final comparison of results on validation set")
+knitr::kable(round(final.results, 3), format="html", booktabs=T, caption="Final comparison of results on validation set")
 ```
 </center>
+
+We found that the predictors might be biased because it mixes up regular features with what could be considered, in other contexts, linearly dependent features. That is the case of the `like` feature, as evidenced by the random forest predictor. But this dataset is special, because it depends on human subjectivity. To give or receive an overall good calification in the five criterias, and it being nicely tied to the preferences of the subject (the out of 100 scores), does not really mean the date will result in a match.
+
+Still, as the confusion matrix above shows, some of the models give really good results. Preliminar results of the first models showcased an alarmingly low NPV (as low as 50%), meaning that models were prone to predict negatively in most cases. This results in a good proportion of true negatives, but too many matches were predicted as non-matches. And, judging by the proportion of matches in the dataset, it kind of sounds reasonable.
+
+We were not able to find any better tuning for the MLP neural network or for the SVM. Actually, all attempts at tuning the SVM parameters ended up with worse results. It seems like the function is able to estimate the best parameter options by itself, or maybe the default values were just the most appropriate for our dataset. Meanwhile, there just is not much we can do with logistic regression, and it shows in the results.
+
+But, all in all, the final results are really good, considering the dirtiness (it needed a lot of preprocessing) and subjectiveness of the chosen dataset, we have found a very good model. We are talking about the rest, which has a balanced accuracy of `r mean(as.numeric(final.results[2,2:3]))`. It is also able to accurately match the couple from previous section.
+
+We do realize that, comparing the high PPV and NPV to the OOB-error (which is `r round(rev(best.rf.model.2$finalModel$err.rate[,1])[1] * 100, 2)`%) it does show that there is some margin for improvement. The forest might be overfit, or we might have used too many features to build the model. The numbers with the training set are good but, to be sure, more data would be ideal. It always is ideal.
