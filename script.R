@@ -498,26 +498,33 @@ confusionMatrix(cm.table)
 
 ### SVM
 
-#svm.grid.linear <- expand.grid(gamma = c(0.1, 0.5, 1, 1.5, 2),
-#                               C = c(3.5, 3.8, 4, 4.2, 4.5, 5, 5.5))
-#svm.model.linear <- train(match ~ ., data = speed.dating.cont, subset = learn, method = "svmLinear", preProc = c("center", "scale"), 
-#                          trControl = trc.5CV, tuneGrid = svm.grid.linear, tuneLength = 10)
+#Instead of executing the following lines, load the pre-saved file
+######################################################################################################################################
+#svm.grid.linear <- expand.grid(gamma = c(0.1, 0.5, 1, 1.5, 2),                                                                      #
+#                               C = c(3.5, 3.8, 4, 4.2, 4.5, 5, 5.5))                                                                #
+#svm.model.linear <- train(match ~ ., data = speed.dating.cont, subset = learn, method = "svmLinear", preProc = c("center", "scale"),# 
+#                          trControl = trc.5CV, tuneGrid = svm.grid.linear, tuneLength = 10)                                         #
+######################################################################################################################################
 svm.model.linear <- readRDS("svm-model-linear")
 saveRDS(svm.model.linear, "svm-model-linear")
 
-
-#svm.model <- train(match ~ ., data = speed.dating.cont, subset = learn, method = "svmRadial", preProc = c("center", "scale"), 
-#                   trControl = trc.5CV, tuneLength = 10)
+#Instead of executing the following lines, load the pre-saved file
+###############################################################################################################################
+#svm.model <- train(match ~ ., data = speed.dating.cont, subset = learn, method = "svmRadial", preProc = c("center", "scale"),# 
+#                   trControl = trc.5CV, tuneLength = 10)                                                                     #
+###############################################################################################################################
 svm.model <- readRDS("svm-model")
 saveRDS(svm.model, "svm-model")
 (svm.model)
 #sigma held const at 0.0108 and C = 4
 
 ###Radial kernel is better than the linear one, lets stick with that and do some fine tuning
-#svm.grid <- expand.grid(sigma = c(0.005, 0.010, .015, 0.02 ),
-#                    C = c(3.3, 3.5, 3.8, 4, 4.2, 4.5, 5))
-#svm.model2 <- train(match ~ ., data = speed.dating.cont, subset = learn, method = "svmRadial", preProc = c("center", "scale"), 
-#                                 trControl = trc.5CV, tuneGrid = svm.grid, tuneLength = 10)
+################################################################################################################################
+#svm.grid <- expand.grid(sigma = c(0.005, 0.010, .015, 0.02 ),                                                                 #
+#                    C = c(3.3, 3.5, 3.8, 4, 4.2, 4.5, 5))                                                                     #
+#svm.model2 <- train(match ~ ., data = speed.dating.cont, subset = learn, method = "svmRadial", preProc = c("center", "scale"),# 
+#                                 trControl = trc.5CV, tuneGrid = svm.grid, tuneLength = 10)                                   #
+################################################################################################################################
 svm.model2 <- readRDS("svm-model2")
 saveRDS(svm.model2, "svm-model2")
 

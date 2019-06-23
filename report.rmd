@@ -10,6 +10,7 @@ header-includes:
 output:
   pdf_document:
     keep_tex: no
+bibliography: ref.bib
 ---
 
 ```{r include=F}
@@ -68,6 +69,10 @@ Below, a detailed explanation of the variables. The names of the variables are n
 - `match`: Target binary feature. `1` if both subjects agree on seeing each other in the future.
 
 The features that are scored out of 100 work differently in comparison to regular grades. The subjects were given a 100 points to distribute among the five criteria and the `shared_interests` criteria. This means that the sum of the scores in these blocks should add up to 100.
+
+# Similar work done
+
+There are several works done based on this dataset. [-@Dataset] Most significant work done is the initial reason of the creating the dataset, an academic work with title "Gender Differences in Mate Selection: Evidence from a Speed Dating Experiment". Authors of the work are same people with the ones who gathered the dataset. [-@FirstPaper] They wanted to investigate the selectivity factors for individuals and for different genders. Apart from this work, other examples contains different interpretation for the dataset. One of the popular ones is [-@SecondOne], it exploits the results in order to visualize the importance of features for participants.  
 
 # Data preprocessing
 
@@ -315,7 +320,7 @@ legend("bottomleft", legend=paste("decay =", seq(from=0.1, to=0.5, by=0.1)), col
 
 ## Random forests
 
-To build the random forest models, the two types of features (categorical ones from one side and continuous ones from the other) have been fed to it separately. The forest built with the continuous features gave slightly better preliminary results, so we have worked with it. To find the best possible model, we have parametrized the treen spawn (`ntree`), leaving the variable sample size static to \(\lfloor\sqrt{D} \times 3\rfloor =\) `r floor(sqrt(ncol(speed.dating.cat)) * 3)` (\(D\) being the amount of dimensions), and built it with 10-fold cross-validation. The accuracy did not vary too much among these models, but the one with the highest accuracy usually ends up using 175 trees.
+To build the random forest models, the two types of features (categorical ones from one side and continuous ones from the other) have been fed to it separately. The forest built with the continuous features gave slightly better preliminary results, so we have worked with it. To find the best possible model, we have parametrized the tree spawn (`ntree`), leaving the variable sample size static to \(\lfloor\sqrt{D} \times 3\rfloor =\) `r floor(sqrt(ncol(speed.dating.cat)) * 3)` (\(D\) being the amount of dimensions), and built it with 10-fold cross-validation. The accuracy did not vary too much among these models, but the one with the highest accuracy usually ends up using 175 trees.
 
 ```{r rf-var-importance, echo=F, out.extra="", fig.cap="Barplot of the importance of variables in the forest", fig.align="center", fig.pos="H", fig.height=4, fig.width=5.25}
 best.rf.model <- readRDS("best-rf-model")
@@ -360,6 +365,7 @@ for (sigma in unique(svm.model2$results[,1])) {
 legend("bottomleft", legend = paste("Sigma =", unique(svm.model2$results[,1])), col=rainbow(4), lty=1, cex=.8, bg="white")
 points(svm.model2$results[order(svm.model2$results[,3], decreasing = T)[1],2:3], col="red")
 ```
+
 
 ```{r include=F}
 prediction <- predict(svm.model, speed.dating.cont[-learn,])
@@ -444,3 +450,5 @@ We were not able to find any better tuning for the MLP neural network or for the
 But, all in all, the final results are really good, considering the dirtiness (it needed a lot of preprocessing) and subjectiveness of the chosen dataset, we have found a very good model. We are talking about the rest, which has a balanced accuracy of `r mean(as.numeric(final.results[2,2:3]))`. It is also able to accurately match the couple from previous section.
 
 We do realize that, comparing the high PPV and NPV to the OOB-error (which is `r round(rev(best.rf.model.2$finalModel$err.rate[,1])[1] * 100, 2)`%) it does show that there is some margin for improvement. The forest might be overfit, or we might have used too many features to build the model. The numbers with the training set are good but, to be sure, more data would be ideal. It always is ideal.
+
+#References
